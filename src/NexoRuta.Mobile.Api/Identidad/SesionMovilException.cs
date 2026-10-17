@@ -1,0 +1,16 @@
+namespace NexoRuta.Mobile.Api.Identidad;
+
+public sealed class SesionMovilException(ErrorSesionMovil error) : Exception(error switch
+{
+    ErrorSesionMovil.CredencialesRechazadas => "No se pudo ingresar con esa cuenta y contraseña.",
+    ErrorSesionMovil.ReingresoNecesario => "Ingresá nuevamente con la misma cuenta para continuar.",
+    ErrorSesionMovil.CuentaDiferente => "Debés ingresar con la cuenta que conserva el trabajo local.",
+    ErrorSesionMovil.AccesoDenegado => "La cuenta no tiene acceso a esta operación.",
+    ErrorSesionMovil.DemasiadasSolicitudes => "Se realizaron demasiados intentos. Esperá antes de volver a intentar.",
+    ErrorSesionMovil.ServicioNoDisponible => "El servicio no está disponible en este momento.",
+    ErrorSesionMovil.EstadoLocalInvalido => "No se pudo recuperar la sesión local. Se conservan los datos existentes.",
+    _ => "El servicio devolvió una respuesta de sesión inválida."
+})
+{
+    public ErrorSesionMovil Error { get; } = error;
+}

@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><IsAotCompatible>true</IsAotCompatible></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../NexoRuta.Mobile.Core/NexoRuta.Mobile.Core.csproj" />
+    <ProjectReference Include="../NexoRuta.Mobile.Api/NexoRuta.Mobile.Api.csproj" />
+    <ProjectReference Include="../NexoRuta.Mobile.Storage/NexoRuta.Mobile.Storage.csproj" />
+  </ItemGroup>
+</Project>

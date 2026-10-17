@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui" xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+ xmlns:vm="clr-namespace:NexoRuta.Mobile.Presentacion" x:Class="NexoRuta.Mobile.HojaRutaPage" x:DataType="vm:HojaRutaViewModel" Title="Hoja de ruta">
+ <Grid Padding="20" RowDefinitions="Auto,Auto,*" RowSpacing="12">
+  <VerticalStackLayout Spacing="6">
+   <Label Text="{Binding Hoja.Fecha, StringFormat='{0:dd/MM/yyyy}'}" FontSize="26" FontAttributes="Bold" />
+   <Label Text="{Binding Hoja.Matricula}" /><Label Text="{Binding Resumen}" /><Label Text="{Binding Mensaje}" />
+   <ActivityIndicator IsRunning="{Binding Ocupado}" IsVisible="{Binding Ocupado}" />
+   <Button Text="Iniciar jornada con conexión" Command="{Binding Iniciar}" IsVisible="{Binding MostrarInicio}" />
+   <HorizontalStackLayout Spacing="8" IsVisible="{Binding MostrarCarga}">
+    <Button Text="Escanear bulto" Command="{Binding Escanear}" /><Button Text="Confirmar carga" Command="{Binding ConfirmarCarga}" />
+   </HorizontalStackLayout>
+   <Button Text="Sincronizar pendientes" Command="{Binding Sincronizar}" />
+   <Button Text="Declarar bultos devueltos" Command="{Binding Rendir}" IsVisible="{Binding MostrarRendicion}" />
+   <Button Text="Terminar jornada" Command="{Binding Finalizar}" IsVisible="{Binding MostrarCierre}" />
+  </VerticalStackLayout>
+  <Label Grid.Row="1" Text="Paradas del día" FontSize="22" FontAttributes="Bold" />
+  <CollectionView Grid.Row="2" ItemsSource="{Binding Paradas}" SelectionMode="Single" SelectionChanged="AbrirParada">
+   <CollectionView.ItemTemplate><DataTemplate x:DataType="vm:ParadaResumen">
+    <Border Padding="16" Margin="0,0,0,12" StrokeShape="RoundRectangle 12"><VerticalStackLayout Spacing="8">
+     <Label Text="{Binding Titulo}" FontSize="20" FontAttributes="Bold" /><Label Text="{Binding Direccion}" FontSize="17" />
+     <Label Text="{Binding Bultos}" /><Label Text="{Binding Estado}" />
+     <Label Text="Abrir parada →" TextColor="{StaticResource Primary}" />
+    </VerticalStackLayout></Border>
+   </DataTemplate></CollectionView.ItemTemplate>
+  </CollectionView>
+ </Grid>
+</ContentPage>

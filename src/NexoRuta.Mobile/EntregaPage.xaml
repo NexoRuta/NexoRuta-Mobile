@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui" xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+ xmlns:vm="clr-namespace:NexoRuta.Mobile.Presentacion" x:Class="NexoRuta.Mobile.EntregaPage" x:DataType="vm:EntregaViewModel" Title="Entrega">
+ <ScrollView><VerticalStackLayout Padding="20" Spacing="14">
+  <Label Text="{Binding Parada.Destinatario}" FontSize="24" FontAttributes="Bold" />
+  <Label Text="{Binding Parada.Direccion}" FontSize="18" />
+  <Button Text="Ver destino en el mapa" Clicked="AbrirMapa" />
+  <Label Text="{Binding Mensaje}" FontSize="16" />
+  <ActivityIndicator IsVisible="{Binding Ocupado}" IsRunning="{Binding Ocupado}" />
+  <VerticalStackLayout IsVisible="{Binding MostrarNombre}"><Label Text="Nombre del receptor" /><Entry Text="{Binding Nombre}" MaxLength="160" /></VerticalStackLayout>
+  <VerticalStackLayout IsVisible="{Binding MostrarDocumento}"><Label Text="Documento del receptor" /><Entry Text="{Binding Documento}" MaxLength="40" /></VerticalStackLayout>
+  <VerticalStackLayout IsVisible="{Binding MostrarFoto}" Spacing="6">
+   <Label Text="{Binding FotoEstado}" /><Button Text="Tomar foto" Command="{Binding TomarFoto}" />
+   <Button Text="Descartar borrador de foto" IsVisible="{Binding QuitarFotoVisible}" Command="{Binding QuitarFoto}" />
+  </VerticalStackLayout>
+  <VerticalStackLayout IsVisible="{Binding MostrarFirma}" Spacing="6">
+   <Label Text="{Binding FirmaEstado}" /><Button Text="Firma del receptor" Command="{Binding Firmar}" />
+   <Button Text="Descartar borrador de firma" IsVisible="{Binding QuitarFirmaVisible}" Command="{Binding QuitarFirma}" />
+  </VerticalStackLayout>
+  <Label Text="Podés declarar la entrega física aunque falte una prueba. La validación queda pendiente hasta completar lo exigido; el plazo termina al cerrar la jornada." FontSize="14" />
+  <Button Text="{Binding AccionEntrega}" Command="{Binding Entregar}" />
+  <VerticalStackLayout IsVisible="{Binding MostrarIntento}" Spacing="10">
+   <Label Text="No se pudo entregar" FontSize="22" FontAttributes="Bold" />
+   <Picker Title="Motivo del intento" ItemsSource="{Binding Motivos}" SelectedItem="{Binding Motivo}" />
+   <Button Text="Registrar intento fallido" Command="{Binding Intento}" />
+  </VerticalStackLayout>
+ </VerticalStackLayout></ScrollView>
+</ContentPage>
