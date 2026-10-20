@@ -12,6 +12,7 @@ public sealed partial class RepositorioJornadasSqlite(string raiz, IAlmacenClave
     private static readonly Lazy<bool> Motor = new(() => { SQLitePCL.Batteries_V2.Init(); return true; });
     private readonly string raiz = Path.GetFullPath(raiz);
     private readonly SemaphoreSlim acceso = new(1, 1);
+    private readonly HashSet<CuentaMovil> suspendidas = [];
 
     public async Task CrearAsync(JornadaLocal jornada, CancellationToken ct = default)
     {
@@ -74,13 +75,7 @@ public sealed partial class RepositorioJornadasSqlite(string raiz, IAlmacenClave
         try
         {
             await using var db = await AbrirAsync(cuenta, ct);
-            using (var capturas = Comando(db, null, "SELECT count(*) FROM Capturas WHERE OperacionId IS NULL AND Descartada=0"))
-                if (Convert.ToInt64(await capturas.ExecuteScalarAsync(ct)) > 0) return true;
-            using var command = Comando(db, null, "SELECT Estado FROM Jornadas");
-            await using var reader = await command.ExecuteReaderAsync(ct);
-            while (await reader.ReadAsync(ct))
-                if (SerializadorJornadaLocal.Deserializar((byte[])reader[0], cuenta).TienePendientes) return true;
-            return false;
+            return await TienePendientesAsync(db, cuenta, ct);
         }
         finally { acceso.Release(); }
     }
@@ -150,6 +145,7 @@ public sealed partial class RepositorioJornadasSqlite(string raiz, IAlmacenClave
 
     private async Task<SqliteConnection> AbrirAsync(CuentaMovil cuenta, CancellationToken ct)
     {
+        if (suspendidas.Contains(cuenta)) throw new InvalidOperationException("Esta cuenta está cerrando sesión. Volvé a ingresar para acceder a su trabajo guardado.");
         _ = Motor.Value;
         var identidad = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
             $"{cuenta.UsuarioId:N}:{cuenta.AccesoId:N}:{cuenta.OperadorId:N}")));
@@ -200,6 +196,7 @@ public sealed partial class RepositorioJornadasSqlite(string raiz, IAlmacenClave
                     CREATE TABLE Capturas(Id TEXT PRIMARY KEY NOT NULL, JornadaId TEXT NOT NULL REFERENCES Jornadas(Id),
                         EnvioId TEXT NOT NULL, Tipo TEXT NOT NULL, Lista INTEGER NOT NULL DEFAULT 0, OperacionId TEXT NULL, Descartada INTEGER NOT NULL DEFAULT 0);
                     CREATE TABLE Metadatos(Clave TEXT PRIMARY KEY NOT NULL, Datos BLOB NOT NULL);
+                    CREATE TABLE HojasRemotas(Id TEXT PRIMARY KEY NOT NULL, Version INTEGER NOT NULL, Datos BLOB NOT NULL);
                     INSERT INTO Cuenta(Identidad) VALUES($cuenta);
                     PRAGMA user_version=1;
                     """, ("$cuenta", identidad));

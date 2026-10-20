@@ -6,7 +6,7 @@ using NexoRuta.Mobile.Core.Jornadas;
 
 namespace NexoRuta.Mobile.Api.Tests;
 
-public sealed class ClienteSesionMovilTests
+public sealed partial class ClienteSesionMovilTests
 {
     private static readonly Uri Api = new("https://api.nexoruta.test/");
     private static readonly DateTimeOffset Ahora = new(2026, 10, 17, 15, 0, 0, TimeSpan.Zero);
@@ -440,6 +440,8 @@ public sealed class ClienteSesionMovilTests
         public EstadoSesionMovil? Estado { get; set; }
         public int FallarEnEscritura { get; set; }
         private int escrituras;
+        public bool FallarAlEliminar { get; set; }
+        public Task EliminarAsync() { if (FallarAlEliminar) throw new IOException("SecureStorage no disponible"); Estado = null; return Task.CompletedTask; }
         public Task<EstadoSesionMovil?> LeerAsync() => Task.FromResult(Estado);
         public Task GuardarAsync(EstadoSesionMovil estado)
         {

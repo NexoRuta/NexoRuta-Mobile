@@ -9,5 +9,7 @@ public enum ErrorSesionMovil
     DemasiadasSolicitudes,
     ServicioNoDisponible,
     RespuestaInvalida,
-    EstadoLocalInvalido
+    EstadoLocalInvalido,
+    RecursoNoDisponible,
+    ConflictoServidor
 }

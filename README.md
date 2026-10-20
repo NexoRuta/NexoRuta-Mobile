@@ -1,48 +1,29 @@
 # NexoRuta Mobile
 
-Aplicación móvil del proyecto NexoRuta, creada con .NET MAUI para el cliente de repartidores. La app todavía conserva la pantalla de muestra; incorpora un núcleo .NET para registrar jornadas, archivos cifrados comprobados en el S21 y un cliente HTTP de identidad con pruebas controladas. La UI operativa y la conexión real del ingreso siguen pendientes.
+Aplicación del repartidor en .NET MAUI 10. Incluye ingreso central, desbloqueo local, hojas descargadas, carga inicial, entregas y pruebas, intentos fallidos, rendición y cierre. El trabajo se conserva cifrado sin conexión y se sincroniza con versiones e identificadores estables.
 
-El [plan de implementación](docs/plan-implementacion.md) consolida el alcance Android/iOS, las decisiones acordadas, las dependencias de backend, la sincronización sin conexión y el opcional de push en producción. La entrega prevista es un APK Android firmado e iOS preparado, con validación Apple pendiente. El plan identifica las decisiones y pruebas técnicas que deben resolverse antes de cada tarea; sus propuestas pendientes no son decisiones aprobadas.
+El [plan de implementación](docs/plan-implementacion.md) conserva las decisiones de producto y el avance por tareas. La [arquitectura](docs/arquitectura-mobile.md) explica las capas y los límites de confianza. La [ejecución y evidencia](docs/ejecucion-completa.md) distingue lo implementado, lo probado y lo pendiente.
 
-La [arquitectura móvil](docs/arquitectura-mobile.md) describe los límites del núcleo, la evidencia de la etapa y la preparación necesaria para continuar.
+## Estado al 19/10/2026
 
-## Estado actual
+Backend implementa perfiles, reglas versionadas, rutas, custodia física y sincronización. Backoffice incluye planificación, despacho, recepción y reasignación. La reasignación conserva al custodio actual y encola un aviso dirigido a él; el nuevo despacho exige recepción física en depósito.
 
-Verificado el 17/10/2026: `Mobile.Core` y su proyecto de pruebas compilan en Release; **25 pruebas pasaron** con SDK 10.0.401, tanto en Docker como posteriormente en Ubuntu. Cubren el modelo y el estado serializado en memoria, sin MAUI, SQLite ni backend.
+El cliente Android registra FID y permisos, recibe avisos genéricos y consulta su vigencia después del desbloqueo. Las referencias se guardan cifradas; un push nunca cambia directamente el estado de un envío. Los cambios remotos se consultan sin reemplazar la hoja original usada para sincronizar trabajo pendiente. Al recuperar Internet o activar la app se reintentan los pendientes, incluidos cierres que ya no tienen GPS activo.
 
-El primer intento de compilación Android en Docker falló con **`NETSDK1147`: falta `maui-android`**. Después, el usuario autorizó preparar Ubuntu/VS Code. Se encontró el Android SDK de Android Studio en `~/Android/Sdk`, incluido `adb`; no estaban en el `PATH` al hacer la revisión inicial. No hay todavía ingreso móvil, SQLite cifrado, sincronización HTTP ni push funcionales.
+**Firebase Android ya inicializa en el S21 y ADC tiene permiso de envío; faltan origen HTTPS, ejecución conectada de API/Worker, correo y token Mapbox.** No se acredita recepción push con la app cerrada ni operación móvil contra una API real. iOS está preparado parcialmente: el binding Firebase instalado no expone el registro por FID; ese adaptador y su validación requieren una versión compatible y recursos Apple. El cierre/cambio de cuenta protegido está implementado y probado con HTTP controlado y almacenamiento real; falta comprobarlo desde el S21 contra HTTPS. La cancelación pública por código al correo obligatorio está implementada con pruebas controladas y transporte RabbitMQ; falta SMTP real. La conciliación automática conserva una entrega física offline concurrente con cancelación/reprogramación, sin decisión del despachador. La geocodificación sigue pendiente. No confundir APK compilado con aceptación completa del plan.
 
-El corte **T02.c** agrega AES-256-GCM para archivos, claves en `SecureStorage`, separación por cuenta y reintentos inmutables. **23 pruebas adicionales pasaron**, y el APK Release del S21 guardó y recuperó una imagen después de reiniciar el proceso; se comprobó bloqueo ante clave ausente sin borrar archivos. [Detalle, comandos y límites](docs/almacenamiento-cifrado.md).
-
-Backend y webs usan JWT y roles por organización. El usuario confirmó reutilizarlos; se agregó en backend renovación móvil por **30 días absolutos configurables**, rotación y revocación por sesión. [Contrato central y evidencia](docs/contratos/identidad.md). La integración MAUI todavía está pendiente.
-
-El corte **T03.e.1** agrega `Mobile.Api`: ingreso/contexto/permisos por HTTPS, renovación serializada y reingreso seguro ante respuesta perdida; la cuenta guardada impide reemplazar accidentalmente el trabajo por otra identidad. **42 pruebas controladas pasaron**. El adaptador de sesión en SecureStorage está registrado y compila para Android; todavía no se usa desde una pantalla, no ofrece cierre/cambio de cuenta y no acredita una sesión offline ni una prueba HTTPS/S21 del flujo. [Comportamiento, comandos y límites](docs/sesion-http.md).
-
-Tras instalar la toolchain, **la app MAUI compila en Release para Android ARM64, con 0 advertencias y 0 errores**. Se generó el APK `src/NexoRuta.Mobile/bin/Release/net10.0-android/android-arm64/com.companyname.nexoruta.mobile-Signed.apk`, con firma Android Debug verificada. Conserva la pantalla y el identificador de la plantilla; no es la entrega funcional ni la firma de distribución definitiva.
-
-**Instalación y arranque comprobados por Wi-Fi en Samsung S21 SM-G991U, Android 14/API 34.** ADB informó instalación correcta y arranque en frío con `Status: ok`; se comprobó la UI visible con sus textos y el contador (`Clicked 2 times`). No se validaron depuración con breakpoints/Hot Reload, integraciones con backend ni iOS.
+La compilación Android Release ARM64 conserva tres advertencias Mapbox sobre páginas nativas de 16 KB para Android 16. La firma actual es de desarrollo; la firma de distribución sigue pendiente.
 
 ## Estructura
 
-```text
-NexoRuta.sln
-src/NexoRuta.Mobile.Core/   # núcleo .NET 10 sin dependencias nativas/backend
-  Jornadas/                # operaciones, cierre y estado local versionado
-src/NexoRuta.Mobile.Storage/ # archivos cifrados y contrato de claves; sin MAUI
-src/NexoRuta.Mobile.Api/     # identidad HTTP y contrato de sesión protegida; sin MAUI
-src/NexoRuta.Mobile/
-  NexoRuta.Mobile.csproj  # app MAUI single-project y frameworks condicionales
-  MauiProgram.cs         # composición de la app
-  App.xaml, AppShell.xaml
-  MainPage.xaml(.cs)     # pantalla de contador de la plantilla
-  Platforms/             # arranque y manifiestos por plataforma
-  Resources/             # icono, splash, estilos y recursos
-tests/NexoRuta.Mobile.Core.Tests/  # 25 pruebas del núcleo
-tests/NexoRuta.Mobile.Storage.Tests/ # 23 pruebas sobre archivos reales
-tests/NexoRuta.Mobile.Api.Tests/ # 42 pruebas controladas de identidad/renovación
-```
+- `src/NexoRuta.Mobile.Core`: jornada inmutable, cuenta y contratos locales; sin MAUI ni backend.
+- `src/NexoRuta.Mobile.Api`: identidad, rutas, operaciones, evidencia y avisos por HTTPS.
+- `src/NexoRuta.Mobile.Storage`: SQLite y archivos cifrados, separados por cuenta.
+- `src/NexoRuta.Mobile.Application`: sincronización durable, captura y consulta segura de avisos.
+- `src/NexoRuta.Mobile`: pantallas MVVM, biometría y adaptadores Android/iOS.
+- `tests/`: pruebas portables de las cuatro capas anteriores.
 
-El proyecto configura `net10.0-android`; agrega iOS y MacCatalyst cuando el host no es Linux, y Windows únicamente en Windows. La plataforma destino y sus herramientas disponibles determinan qué framework puede compilarse o ejecutarse.
+Android requiere API 30 (Android 11); iOS, 15. La app se llama **NexoRuta Repartidor**, identificador `uy.nexoruta.repartidor`. Ubuntu compila Android; iOS necesita un Mac con Xcode. Las pantallas comparten la identidad de Backoffice, adaptada al uso del repartidor.
 
 ## Requisitos
 
@@ -90,6 +71,8 @@ Desde la raíz de este repositorio:
 ```bash
 dotnet test tests/NexoRuta.Mobile.Core.Tests/NexoRuta.Mobile.Core.Tests.csproj --configuration Release
 dotnet test tests/NexoRuta.Mobile.Storage.Tests/NexoRuta.Mobile.Storage.Tests.csproj --configuration Release
+dotnet test tests/NexoRuta.Mobile.Api.Tests/NexoRuta.Mobile.Api.Tests.csproj --configuration Release
+dotnet test tests/NexoRuta.Mobile.Application.Tests/NexoRuta.Mobile.Application.Tests.csproj --configuration Release
 ```
 
 Esta comprobación solo necesita SDK .NET 10. Para compilar la solución completa hacen falta también los workloads y SDKs nativos de cada destino:
@@ -120,6 +103,10 @@ dotnet build src/NexoRuta.Mobile/NexoRuta.Mobile.csproj -t:Run -f net10.0-androi
 
 Este comando requiere un emulador iniciado o dispositivo Android conectado y reconocido por las herramientas locales. La validación del S21 se hizo instalando el APK Release con `adb install -r` y abriendo su actividad con `adb shell am start -W`; no se comprobó todavía una sesión del depurador de VS Code. Para iOS, MacCatalyst o Windows hay que elegir el framework correspondiente al host y disponer de sus herramientas nativas. Esta app no expone una URL ni un puerto HTTP.
 
-## Pendiente
+## Configuración de servicios
 
-Integrar el cliente de identidad con el ingreso MAUI, configurar un origen HTTPS confiable, completar perfil repartidor y los contratos operativos, y reemplazar la pantalla de muestra por los flujos del repartidor. **El diseño toma Backoffice como referencia de identidad y se adapta a una UX simple para el repartidor**, sin copiar su distribución de escritorio ni sus partes incompletas. Siguen pendientes SQLite cifrado, biometría, captura de cámara, sincronización operativa HTTP, mapas offline y push. El cifrado de archivos es una base comprobada; no acredita todavía una jornada ni entrega durable sin conexión.
+La API se fija al compilar mediante `-p:NexoRutaApiOrigin=https://api.su-dominio/`. Se exige HTTPS confiable; no se desactiva la validación del certificado. Sin ese valor, la app muestra que falta configurar el servicio.
+
+Para Android, usar `-p:NexoRutaFirebaseAndroidConfig=/ruta/externa/google-services.json`, correspondiente a `uy.nexoruta.repartidor`. La compilación falla si se indicó una ruta inexistente. El archivo se mantiene fuera del repositorio; sin configuración, la app informa la dependencia y conserva la operación local.
+
+Mapbox usa `-p:NexoRutaMapboxPublicToken=pk.SU_TOKEN_PUBLICO`. El token público forma parte del cliente; las credenciales administrativas de Firebase y las claves de cifrado pertenecen exclusivamente a backend/Worker. Revisar [push y reasignación](docs/push-reasignacion.md) antes de configurar o demostrar notificaciones remotas.

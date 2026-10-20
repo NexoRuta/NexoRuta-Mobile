@@ -41,43 +41,22 @@
 					<string>__MAUI_DEFAULT_SCENE_CONFIGURATION__</string>
 					<key>UISceneDelegateClassName</key>
 					<string>SceneDelegate</string>
-					<key>NSCameraUsageDescription</key>
-	<string>Tomar fotos de entrega y escanear los bultos de tu hoja de ruta.</string>
-    <key>NSLocationWhenInUseUsageDescription</key>
-    <string>Registrar tu recorrido únicamente durante la jornada que iniciás.</string>
-    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-    <string>Continuar el registro de la jornada con la pantalla apagada hasta que la finalices.</string>
-    <key>UIBackgroundModes</key>
-    <array><string>location</string><string>remote-notification</string></array>
-</dict>
+				</dict>
 			</array>
-			<key>NSCameraUsageDescription</key>
-	<string>Tomar fotos de entrega y escanear los bultos de tu hoja de ruta.</string>
-    <key>NSLocationWhenInUseUsageDescription</key>
-    <string>Registrar tu recorrido únicamente durante la jornada que iniciás.</string>
-    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-    <string>Continuar el registro de la jornada con la pantalla apagada hasta que la finalices.</string>
-    <key>UIBackgroundModes</key>
-    <array><string>location</string><string>remote-notification</string></array>
-</dict>
-		<key>NSCameraUsageDescription</key>
-	<string>Tomar fotos de entrega y escanear los bultos de tu hoja de ruta.</string>
-    <key>NSLocationWhenInUseUsageDescription</key>
-    <string>Registrar tu recorrido únicamente durante la jornada que iniciás.</string>
-    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-    <string>Continuar el registro de la jornada con la pantalla apagada hasta que la finalices.</string>
-    <key>UIBackgroundModes</key>
-    <array><string>location</string><string>remote-notification</string></array>
-</dict>
+		</dict>
+	</dict>
 	<key>XSAppIconAssets</key>
 	<string>Assets.xcassets/appicon.appiconset</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Tomar fotos de entrega y escanear los bultos de tu hoja de ruta.</string>
-    <key>NSLocationWhenInUseUsageDescription</key>
-    <string>Registrar tu recorrido únicamente durante la jornada que iniciás.</string>
-    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-    <string>Continuar el registro de la jornada con la pantalla apagada hasta que la finalices.</string>
-    <key>UIBackgroundModes</key>
-    <array><string>location</string><string>remote-notification</string></array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Registrar tu recorrido únicamente durante la jornada que iniciás.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Continuar el registro de la jornada con la pantalla apagada hasta que la finalices.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+		<string>remote-notification</string>
+	</array>
 </dict>
 </plist>

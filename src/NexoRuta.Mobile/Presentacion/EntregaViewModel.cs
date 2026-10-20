@@ -29,7 +29,7 @@ public sealed class EntregaViewModel : INotifyPropertyChanged
     public bool MostrarFirma => padre.Hoja.Politica.RequiereFirma || firmaId is not null;
     public bool Ocupado => padre.Ocupado;
     public string[] Motivos => padre.Hoja.Politica.Motivos;
-    public bool PuedeRegistrar => padre.Iniciada && padre.Salida && !padre.Cerrada && padre.Estado(Parada) is not ("Entregado" or "EntregaSinValidacion");
+    public bool PuedeRegistrar => padre.Iniciada && padre.Salida && !padre.Cerrada && (padre.ParadaActiva(Parada) || padre.EntregaFisica(Parada.EnvioId)) && padre.Estado(Parada) is not ("Entregado" or "EntregaSinValidacion");
     public bool MostrarIntento => PuedeRegistrar && !padre.EntregaFisica(Parada.EnvioId);
     public string AccionEntrega => padre.EntregaFisica(Parada.EnvioId) ? "Completar prueba de entrega" : "Declarar entrega física";
     public string FotoEstado => fotoId is null ? "Sin foto" : capturas.Any(x => x.Id == fotoId && !x.Lista) ? "Foto interrumpida; volvé a capturarla." : "Foto guardada";

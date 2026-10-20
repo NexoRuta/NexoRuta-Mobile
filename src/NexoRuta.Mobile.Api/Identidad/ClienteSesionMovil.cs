@@ -178,6 +178,8 @@ public sealed partial class ClienteSesionMovil : IDisposable
         {
             HttpStatusCode.Unauthorized => rechazo,
             HttpStatusCode.Forbidden => ErrorSesionMovil.AccesoDenegado,
+            HttpStatusCode.NotFound => ErrorSesionMovil.RecursoNoDisponible,
+            HttpStatusCode.Conflict => ErrorSesionMovil.ConflictoServidor,
             HttpStatusCode.TooManyRequests => ErrorSesionMovil.DemasiadasSolicitudes,
             >= HttpStatusCode.InternalServerError => ErrorSesionMovil.ServicioNoDisponible,
             _ => ErrorSesionMovil.RespuestaInvalida

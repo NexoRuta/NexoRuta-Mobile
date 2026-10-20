@@ -14,4 +14,9 @@ public sealed class AlmacenSesionProtegida : IAlmacenSesionMovil
 
     public Task GuardarAsync(EstadoSesionMovil estado) =>
         SecureStorage.Default.SetAsync(Clave, SerializadorSesionMovil.Serializar(estado));
+    public Task EliminarAsync()
+    {
+        SecureStorage.Default.Remove(Clave);
+        return Task.CompletedTask;
+    }
 }

@@ -22,9 +22,14 @@ public static class MauiProgram
         {
             builder.Services.AddSingleton(s => new ClienteSesionMovil(api, s.GetRequiredService<IAlmacenSesionMovil>()));
             builder.Services.AddSingleton<NexoRuta.Mobile.Application.SincronizadorJornada>();
+            builder.Services.AddSingleton<NexoRuta.Mobile.Application.ServicioAvisosReparto>();
+            builder.Services.AddSingleton<NexoRuta.Mobile.Application.ServicioSesionTrabajo>();
+            builder.Services.AddSingleton<SincronizacionConectividad>();
         }
         if (!string.IsNullOrEmpty(configuracion.MapboxToken)) builder.UseMapbox(configuracion.MapboxToken, enableTelemetry: false);
         builder.Services.AddSingleton<PrincipalViewModel>();
+        builder.Services.AddSingleton<Notificaciones.IRegistroPush, Notificaciones.RegistroPushPlataforma>();
+        builder.Services.AddSingleton<Notificaciones.ControlNotificaciones>();
         builder.Services.AddSingleton<MainPage>();
         builder.Services.AddSingleton<Captura.IInteraccionReparto, Captura.InteraccionReparto>();
         builder.Services.AddSingleton<Ubicacion.ITrackingJornada, Ubicacion.TrackingJornada>();

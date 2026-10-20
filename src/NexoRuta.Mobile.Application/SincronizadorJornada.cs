@@ -11,6 +11,18 @@ public sealed class SincronizadorJornada(ClienteSesionMovil cliente, Repositorio
     RepositorioArchivosCifrados archivos) : IDisposable
 {
     private readonly SemaphoreSlim exclusividad = new(1, 1);
+    public async Task<int> SincronizarPendientesAsync(CuentaMovil cuenta, CancellationToken ct = default)
+    {
+        var total = 0;
+        foreach (var jornada in await datos.LeerJornadasAsync(cuenta, ct))
+            while ((await datos.LeerAsync(cuenta, jornada.Id, ct))!.TienePendientes)
+            {
+                var enviados = await SincronizarAsync(cuenta, jornada.Id, ct);
+                total += enviados;
+                if (enviados == 0) break;
+            }
+        return total;
+    }
     public async Task<int> SincronizarAsync(CuentaMovil cuenta, Guid jornadaId, CancellationToken ct = default)
     {
         await exclusividad.WaitAsync(ct);
@@ -44,7 +56,7 @@ public sealed class SincronizadorJornada(ClienteSesionMovil cliente, Repositorio
                     await datos.GuardarSobreAsync(cuenta, jornadaId, pendiente.Id, sobre, ct);
                 }
                 await SubirArchivos(cuenta, jornadaId, pendiente, ct);
-                var resultado = await cliente.EnviarOperacionAsync(jornadaId, sobre, ct);
+                var resultado = await cliente.EnviarOperacionAsync(cuenta, jornadaId, sobre, ct);
                 Validar(resultado, versiones);
                 if (resultado.Id != pendiente.Id || resultado.Secuencia != pendiente.Secuencia)
                     throw new InvalidDataException("El servidor no confirmó la operación enviada.");
@@ -64,7 +76,7 @@ public sealed class SincronizadorJornada(ClienteSesionMovil cliente, Repositorio
             if (!op.Datos.TryGetProperty(campo, out var valor) || valor.ValueKind == JsonValueKind.Null) continue;
             if (!valor.TryGetGuid(out var id) || id == Guid.Empty) throw new InvalidDataException("La evidencia local no tiene un identificador válido.");
             var contenido = await archivos.LeerAsync(cuenta, id, ct);
-            try { await cliente.SubirEvidenciaAsync(jornada, envio, id, tipo, contenido, ct); }
+            try { await cliente.SubirEvidenciaAsync(cuenta, jornada, envio, id, tipo, contenido, ct); }
             finally { CryptographicOperations.ZeroMemory(contenido); }
         }
     }

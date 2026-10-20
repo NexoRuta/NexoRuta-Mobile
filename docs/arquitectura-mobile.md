@@ -1,40 +1,55 @@
-# Arquitectura de la aplicación móvil
+# Arquitectura de NexoRuta Mobile
 
-## Corte implementado — 17/10/2026
+## Estado y límites al 19/10/2026
 
-La primera etapa incorpora un núcleo .NET 10 comprobable sin MAUI. El corte siguiente agrega archivos cifrados y una prueba nativa Release en el S21. T03.e.1 agrega cliente HTTP de identidad y adaptador de sesión protegida, todavía sin pantalla conectada ni prueba HTTP real. La app conserva su pantalla de plantilla; no ofrece ingreso, rutas ni operación de reparto. SQLite cifrado y la sincronización operativa siguen pendientes. El backend tiene login JWT central y renovación móvil por 30 días absolutos configurables, con rotación y revocación por sesión, según el [contrato de identidad](contratos/identidad.md). El usuario confirmó reutilizar ese sistema y descartó compatibilidades con versiones anteriores.
-
-La UI MAUI toma Backoffice como referencia de identidad, según la aclaración del usuario. Adaptar presentación y distribución a una UX simple para el repartidor, con pocas acciones, controles táctiles y lectura rápida; Backoffice está incompleto y no debe copiarse literalmente. Mantener coherencia en terminología, formularios y mensajes, centralizando recursos en XAML. El requisito y su aceptación están en D16 del plan.
+La app implementa los flujos de jornada en MAUI y los adaptadores Android. La API central conserva la autoridad sobre permisos, asignaciones, custodia y validación de entrega. Las pruebas controladas y la compilación no acreditan integración con Firebase, HTTPS, correo o mapas reales. La evidencia vigente y los pendientes están en [ejecución completa](ejecucion-completa.md).
 
 ```text
-NexoRuta.Mobile                 aplicación MAUI y composición de adaptadores
-    → NexoRuta.Mobile.Core     registro local de jornada y formato de estado
-    → NexoRuta.Mobile.Storage  archivos cifrados; clave suministrada por SecureStorage
-        → NexoRuta.Mobile.Core identidad local de cuenta
-    → NexoRuta.Mobile.Api      HTTP de identidad y contrato del almacén protegido
-        → NexoRuta.Mobile.Core identidad local de cuenta
-
-NexoRuta.Mobile.Core.Tests     pruebas del núcleo, sin workloads MAUI
-    → NexoRuta.Mobile.Core
-
-NexoRuta.Mobile.Storage.Tests  archivos reales, sin workloads MAUI
-    → NexoRuta.Mobile.Storage
-
-NexoRuta.Mobile.Api.Tests      HTTP/almacén controlados, sin workloads MAUI
-    → NexoRuta.Mobile.Api
-
-UI MAUI → cliente de identidad → HTTPS → API   conexión y prueba real pendientes
+MAUI: MVVM, navegación, SecureStorage, biometría, cámara, mapas, GPS y push
+  → Application: sincronización causal, evidencia local y avisos
+      → Api: cliente HTTPS con autenticación central y control de cuenta
+          → Core: identidad y contratos de jornada/ruta
+      → Storage: SQLite cifrado y archivos cifrados por cuenta
+          → Core: diario de operaciones inmutable
 ```
 
-`Mobile.Core` no referencia las capas del backend, EF Core, ASP.NET ni MAUI. El servidor conserva las transiciones de envío, permisos, pertenencias, asignaciones y validación definitiva de pruebas. El núcleo móvil registra lo que el dispositivo necesita conservar y reintentar; no convierte una declaración física en un envío validado.
+Las cuatro capas portables se prueban sin workloads MAUI. Core no referencia EF, ASP.NET ni código del servidor. Los proveedores nativos se componen en `MauiProgram`. Los mapas se consumen mediante una interfaz; no hay navegación giro a giro ni geocodificación durante el reparto.
 
-La referencia MAUI → Core ya está en el proyecto y los dos nuevos proyectos están en `NexoRuta.sln`. La app y esa referencia compilan para Android ARM64 en Release tras preparar Ubuntu; el núcleo todavía no tiene una UI operativa conectada.
+## Sesión y almacenamiento
 
-`Mobile.Storage` y sus pruebas se agregan a la misma solución para verificar E/S y cifrado sin referenciar MAUI desde el núcleo. El [detalle del corte T02.c](almacenamiento-cifrado.md) documenta claves, formato, fallos, backups y evidencia nativa; no sustituye la persistencia operativa de T03.d.
+El backend vigente usa Identity central y JWT. Mobile usa renovación rotativa con vencimiento absoluto a los 30 días del ingreso y versión de credencial. Antes de enviar un refresh, se guarda un estado sin tokens; perder la respuesta exige reingreso de la misma cuenta, sin borrar trabajo. El permiso local de biometría o credencial del teléfono permite abrir la jornada descargada; no sustituye la autorización online para iniciar otra.
 
-Verificación de este corte: **48 pruebas correctas** (25 de jornada y 23 de archivos), APK diagnóstico y normal Release sin advertencias/errores, y prueba Android real con SecureStorage e imagen recuperada tras cambiar de proceso. El APK normal excluye código y asset de diagnóstico; al alternar la propiedad de compilación se limpiaron los artefactos, como indica el documento del corte. La configuración de backup se inspeccionó; no se ejecutó una restauración.
+SQLite usa cifrado ChaCha20 mediante SQLite3MC; las evidencias usan AES-GCM con asociación a cuenta y archivo. Las claves permanecen en SecureStorage. No se almacenan fotos en temporales planos. Perder una clave bloquea la lectura y conserva los archivos. Cada cuenta tiene su propio directorio y sus propias claves.
 
-El corte [T03.e.1](sesion-http.md) añade **42 pruebas controladas** y compilación Android Release. No cambia las dependencias del núcleo. `ClienteSesionMovil` serializa ingreso/renovación/consultas; `AlmacenSesionProtegida` guarda el par en un único valor de SecureStorage. Antes de consumir refresh se persiste un estado sin tokens, conservando cuenta y origen: ante cierre, respuesta perdida o error de guardado, exigir reingreso en lugar de reutilizar un secreto posiblemente consumido. El cliente no ofrece cierre/cambio de cuenta hasta integrar el control real de pendientes. No se instancia desde la plantilla ni sustituye el desbloqueo biométrico.
+`Hojas` conserva la hoja original que alimenta las versiones de sincronización. `HojasRemotas` es una vista de consulta, separada del diario y de los sobres ya congelados. Las confirmaciones causadas por comandos propios promueven versiones; una lectura remota nunca reescribe un comando pendiente. La proyección de pantalla compara versiones para evitar retroceder frente a una confirmación propia más nueva.
+
+## Salida protegida
+
+La salida se orquesta en Application: comprueba pendientes y suspende el repositorio bajo el mismo semáforo que usan GPS, capturas y sincronización. El cliente mantiene su semáforo de autenticación durante la baja de instalación, la revocación y la eliminación de credenciales. Así se impiden tanto escrituras locales tardías como un registro push encolado que reactive el destino después de la baja.
+
+Un fallo reanuda el almacén y conserva la identidad. El éxito conserva todos los datos y claves de la cuenta, detiene seguimiento/avisos y permite otro ingreso. El servidor autoriza la baja de instalación por cuenta y exige sesión móvil, incluso si se retiró el permiso de reparto. Reingresar a la cuenta anterior reanuda su repositorio. No se termina la jornada ni se cambia el estado de envíos al cerrar sesión. [Protocolo y pruebas](sesion-http.md).
+
+## Sincronización y avisos
+
+Cada operación se guarda antes del envío. El sobre HTTP se congela antes de su primer intento y se reenvía sin alterarlo si se pierde la respuesta. Las evidencias se suben antes del hecho que las referencia. El resultado por elemento se persiste antes de avanzar; conflicto no significa borrar el hecho físico ni su prueba. El cierre respeta la secuencia y espera confirmaciones anteriores.
+
+El despachador solo despacha: no decide sobre entregas, devoluciones ni conflictos del paquete. Si el destinatario recibió el paquete, la entrega física se conserva aunque antes hubiera pedido cancelar; una devolución posterior es otro hecho. Un paquete que vuelve sin entregarse se rinde y se recibe en depósito, sin registrarlo como entregado.
+
+El servidor concilia automáticamente la entrega offline frente a cancelación/reprogramación cuando la versión quedó atrás y la jornada tiene salida confirmada y todos los bultos siguen bajo custodia de ese repartidor/ruta. Registra entrega y prueba, pasa los bultos al destinatario y suspende la parada de cualquier ruta futura aún planificada, incrementando su versión. Todo se guarda con la operación y su respuesta inmutables en una transacción bajo el bloqueo del operador; un reintento devuelve esa misma respuesta. Las reglas de prueba y su plazo no cambian. El cierre de otra ruta no vence la prueba de esta entrega. Una custodia incompatible, una versión inválida u otro estado no se fuerzan: se conservan como conflicto y sin modificaciones parciales. Los conflictos ya persistidos no se reescriben.
+
+Un único sincronizador serializa los disparadores manuales, GPS y reconexión. La reconexión y la activación de la ventana reanudan también jornadas cerradas con pendientes, en intentos acotados a 45 segundos. Cada envío verifica la cuenta esperada bajo el mismo semáforo que la autenticación.
+
+La reasignación del servidor cambia la ruta lógica, conserva la custodia física y genera aviso/outbox en la misma transacción. El Worker obtiene destinos mediante funciones SQL con reserva vigente y permisos restringidos; no tiene lectura general de las tablas operativas. FCM aceptado, recibido, abierto y confirmado son hechos distintos.
+
+La cancelación autenticada usa esa misma entrega de avisos. Una función SQL acotada permite al comercio cancelar su propio envío sin habilitarle UPDATE general ni lecturas de rutas; el administrador del operador también puede cancelar y el despachador no. Se persisten cancelación inmutable, versiones, suspensión y aviso/outbox en una transacción; se conserva la custodia hasta rendición/recepción. El aviso móvil contempla una entrega ya recibida offline y nunca le exige rendir ese paquete. Tracking incorpora solicitud y confirmación del código de un uso por correo obligatorio: sin vencimiento temporal, cinco intentos y reemisión. Reutiliza el núcleo transaccional de cancelación y el outbox/RabbitMQ/SMTP existentes, con hash de código y sobre protegido; falta envío a un buzón real. [Contrato](../../backend/docs/cu/cancelacion-envios.md).
+
+El push contiene solo versión e identificadores de aviso/operador/acceso. Android guarda la referencia cifrada y espera desbloqueo antes de consultar su vigencia en la API. Avisos repetidos se agrupan por ID; los de otra cuenta se rechazan. Se consulta la ruta antes de mostrar una instrucción vigente. La vista remota puede impedir una nueva entrega, pero no elimina evidencias previas. El detalle está en [push y reasignación](push-reasignacion.md).
+
+## Presentación y plataformas
+
+La referencia visual es Backoffice, adaptada a controles táctiles y pocas acciones por pantalla. La app se bloquea al detenerse y protege la captura de pantalla en Android. Un permiso cancelado no autoriza una rendición.
+
+Android Release ARM64 compila con MAUI 10.0.60, Android mínimo 11. Mapbox mantiene tres advertencias de páginas nativas de 16 KB para Android 16. iOS mínimo 15 sigue sin compilación ni prueba; su adaptador push está bloqueado por el binding FID y por recursos Apple. No hay compatibilidad con contratos anteriores.
 
 ## Registro de jornada
 
@@ -66,7 +81,7 @@ La serialización produce bytes en memoria. **No implementa persistencia durable
 
 El modelo es síncrono; la composición futura debe serializar las escrituras de la jornada y la coordinación de sincronización. No se ha demostrado acceso concurrente ni recuperación ante fallos de almacenamiento.
 
-## Verificación ejecutada
+## Verificación histórica del primer corte
 
 En contenedor temporal `mcr.microsoft.com/dotnet/sdk:10.0`, con SDK **10.0.401**, runtime **10.0.12** y caché NuGet en `/tmp/nexoruta-mobile-nuget`:
 

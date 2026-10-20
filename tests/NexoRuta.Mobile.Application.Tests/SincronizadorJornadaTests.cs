@@ -11,6 +11,29 @@ namespace NexoRuta.Mobile.Application.Tests;
 public sealed class SincronizadorJornadaTests
 {
     [Fact]
+    public async Task ReconexionProcesaMasDeUnLoteYElCierreSinNecesitarGpsActivo()
+    {
+        using var f = new Escenario(); await f.Preparar(cerrar: false);
+        await f.Datos.ModificarAsync(f.Cuenta, f.Jornada.Id, j =>
+        {
+            for (var i = 0; i < 105; i++)
+                j.RegistrarPosicion(Elemento("{\"latitud\":-34.9,\"longitud\":-56.2,\"precisionMetros\":10}"), DateTimeOffset.UtcNow);
+            j.Finalizar(DateTimeOffset.UtcNow);
+        });
+        var secuencias = new List<long>();
+        using var cliente = f.Cliente(async (r, ct) =>
+        {
+            var comando = JsonSerializer.Deserialize(await r.Content!.ReadAsByteArrayAsync(ct), ContratosRepartoJson.Default.SobreOperacion)!;
+            secuencias.Add(comando.Secuencia); return Confirmar(comando, f.Envio);
+        });
+        using var sync = new SincronizadorJornada(cliente, f.Datos, f.Archivos);
+        Assert.Equal(110, await sync.SincronizarPendientesAsync(f.Cuenta));
+        Assert.Equal(Enumerable.Range(1, 110).Select(i => (long)i), secuencias);
+        Assert.False((await f.Datos.LeerAsync(f.Cuenta, f.Jornada.Id))!.TienePendientes);
+        Assert.Equal(0, await sync.SincronizarPendientesAsync(f.Cuenta));
+        Assert.Equal(110, secuencias.Count);
+    }
+    [Fact]
     public async Task RespuestaPerdidaReenviaLosMismosBytesTrasReabrirSinAdelantarElCierre()
     {
         using var f = new Escenario(); await f.Preparar();
@@ -199,8 +222,9 @@ public sealed class SincronizadorJornadaTests
         public Task<string?> ObtenerAsync(string nombre) => Task.FromResult(valores.GetValueOrDefault(nombre));
         public Task GuardarAsync(string nombre, string valor) { valores[nombre] = valor; return Task.CompletedTask; }
     }
-    private sealed class Almacen(EstadoSesionMovil estado) : IAlmacenSesionMovil
+    private sealed class Almacen(EstadoSesionMovil? estado) : IAlmacenSesionMovil
     {
+        public Task EliminarAsync() { estado = null; return Task.CompletedTask; }
         public Task<EstadoSesionMovil?> LeerAsync() => Task.FromResult<EstadoSesionMovil?>(estado);
         public Task GuardarAsync(EstadoSesionMovil nuevo) { estado = nuevo; return Task.CompletedTask; }
     }

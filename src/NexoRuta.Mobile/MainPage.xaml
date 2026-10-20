@@ -19,10 +19,16 @@
                 <Label Text="Tu administrador crea y gestiona la cuenta." FontSize="14" />
             </VerticalStackLayout>
         </ScrollView>
-        <Grid Grid.Row="2" RowDefinitions="Auto,Auto,*" RowSpacing="12" IsVisible="{Binding Desbloqueada}">
+        <Grid Grid.Row="2" RowDefinitions="Auto,Auto,Auto,*" RowSpacing="12" IsVisible="{Binding Desbloqueada}" IsEnabled="{Binding PuedeOperar}">
             <HorizontalStackLayout Spacing="12"><DatePicker Date="{Binding Fecha}" /><Button Text="Descargar hoja" Command="{Binding Descargar}" /></HorizontalStackLayout>
             <Label Grid.Row="1" Text="Tus rutas guardadas" FontAttributes="Bold" FontSize="22" />
-            <CollectionView Grid.Row="2" ItemsSource="{Binding Hojas}" SelectionMode="Single" SelectionChanged="AbrirHoja">
+            <VerticalStackLayout Grid.Row="2" Spacing="6">
+                <HorizontalStackLayout Spacing="12"><Button Text="Mis avisos" Clicked="AbrirAvisos" /><Button Text="Activar avisos" Command="{Binding ActivarAvisos}" /></HorizontalStackLayout>
+                <Label Text="{Binding EstadoAvisos}" FontSize="14" />
+                <Button Text="Volver a ingresar con mi cuenta" Command="{Binding Reingresar}" />
+                <Button Text="Cerrar sesión / cambiar de cuenta" Command="{Binding CerrarSesion}" />
+            </VerticalStackLayout>
+            <CollectionView Grid.Row="3" ItemsSource="{Binding Hojas}" SelectionMode="Single" SelectionChanged="AbrirHoja">
                 <CollectionView.EmptyView><Label Text="Todavía no hay hojas descargadas." Padding="0,20" /></CollectionView.EmptyView>
                 <CollectionView.ItemTemplate><DataTemplate x:DataType="r:HojaRuta">
                     <Border Margin="0,0,0,12" Padding="16" StrokeShape="RoundRectangle 12"><VerticalStackLayout Spacing="5">

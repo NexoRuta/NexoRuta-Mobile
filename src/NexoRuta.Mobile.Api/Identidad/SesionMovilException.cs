@@ -9,6 +9,8 @@ public sealed class SesionMovilException(ErrorSesionMovil error) : Exception(err
     ErrorSesionMovil.DemasiadasSolicitudes => "Se realizaron demasiados intentos. Esperá antes de volver a intentar.",
     ErrorSesionMovil.ServicioNoDisponible => "El servicio no está disponible en este momento.",
     ErrorSesionMovil.EstadoLocalInvalido => "No se pudo recuperar la sesión local. Se conservan los datos existentes.",
+    ErrorSesionMovil.RecursoNoDisponible => "El aviso o la ruta ya no están disponibles para esta cuenta.",
+    ErrorSesionMovil.ConflictoServidor => "Hay cambios en el servidor. Sincronizá para revisar el estado actual.",
     _ => "El servicio devolvió una respuesta de sesión inválida."
 })
 {

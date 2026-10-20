@@ -28,12 +28,14 @@ public sealed partial class ClienteSesionMovil
             throw new SesionMovilException(ErrorSesionMovil.AccesoDenegado);
     }
 
-    private async Task<T> ConsultarAsync<T>(string ruta, JsonTypeInfo<T> tipo, CancellationToken ct)
+    private async Task<T> ConsultarAsync<T>(string ruta, JsonTypeInfo<T> tipo, CancellationToken ct, CuentaMovil? cuentaEsperada = null)
     {
         await exclusividad.WaitAsync(ct);
         try
         {
             var estado = await LeerAsync() ?? throw new SesionMovilException(ErrorSesionMovil.ReingresoNecesario);
+            if (cuentaEsperada is not null && estado.Cuenta != cuentaEsperada)
+                throw new SesionMovilException(ErrorSesionMovil.CuentaDiferente);
             estado = await AsegurarTokenAsync(estado, false, ct);
             using var primera = await GetAsync(ruta, estado.Tokens!, ct);
             if (primera.StatusCode != HttpStatusCode.Unauthorized) { ExigirExito(primera); return await LeerJsonAsync(primera, tipo, ct); }

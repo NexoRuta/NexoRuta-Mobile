@@ -7,12 +7,26 @@ public partial class HojaRutaPage : ContentPage
 {
     private readonly HojaRutaViewModel modelo;
     private readonly IServiceProvider servicios;
+    private readonly SincronizacionConectividad? sincronizacion;
     public HojaRutaPage(HojaRuta hoja, CuentaMovil cuenta, IServiceProvider servicios)
     {
         InitializeComponent(); this.servicios = servicios;
         modelo = ActivatorUtilities.CreateInstance<HojaRutaViewModel>(servicios, hoja, cuenta); BindingContext = modelo;
+        sincronizacion = servicios.GetService<SincronizacionConectividad>();
     }
-    protected override async void OnAppearing() { base.OnAppearing(); await modelo.InicializarAsync(); }
+    protected override async void OnAppearing()
+    {
+        base.OnAppearing();
+        if (sincronizacion is not null) sincronizacion.Finalizada += Actualizar;
+        await modelo.InicializarAsync();
+    }
+    protected override void OnDisappearing()
+    { if (sincronizacion is not null) sincronizacion.Finalizada -= Actualizar; base.OnDisappearing(); }
+    private void Actualizar(CuentaMovil cuenta)
+    {
+        if (cuenta == modelo.Cuenta) Dispatcher.Dispatch(async () =>
+        { if (!modelo.Ocupado) await modelo.Ejecutar(modelo.Refrescar); });
+    }
     private async void AbrirParada(object? sender, SelectionChangedEventArgs e)
     {
         if (sender is CollectionView lista) lista.SelectedItem = null;

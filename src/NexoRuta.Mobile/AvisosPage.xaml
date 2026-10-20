@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui" xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:local="clr-namespace:NexoRuta.Mobile" x:Class="NexoRuta.Mobile.AvisosPage" x:DataType="local:AvisosPage" Title="Cambios de tu ruta">
+    <Grid Padding="20" RowDefinitions="Auto,Auto,*,Auto" RowSpacing="12">
+        <Label Text="{Binding Mensaje}" FontSize="16" />
+        <Button Grid.Row="1" Text="Actualizar avisos" Clicked="Actualizar" IsEnabled="{Binding Disponible}" />
+        <CollectionView Grid.Row="2" ItemsSource="{Binding Avisos}" SelectionMode="Single" SelectionChanged="Elegir">
+            <CollectionView.EmptyView><Label Text="No hay cambios pendientes de revisar." /></CollectionView.EmptyView>
+            <CollectionView.ItemTemplate><DataTemplate x:DataType="local:AvisoResumen">
+                <Border Padding="14" Margin="0,0,0,10" StrokeShape="RoundRectangle 12"><VerticalStackLayout Spacing="5">
+                    <Label Text="{Binding Titulo}" FontAttributes="Bold" /><Label Text="{Binding Motivo}" /><Label Text="{Binding Fecha}" FontSize="13" />
+                </VerticalStackLayout></Border>
+            </DataTemplate></CollectionView.ItemTemplate>
+        </CollectionView>
+        <VerticalStackLayout Grid.Row="3" Spacing="10">
+            <Label x:Name="Detalle" FontSize="17" />
+            <Button x:Name="VerHoja" Text="Revisar mi hoja" Clicked="AbrirHoja" IsVisible="False" IsEnabled="{Binding Disponible}" />
+            <Button x:Name="Entendido" Text="Entendido" Clicked="Confirmar" IsVisible="False" IsEnabled="{Binding Disponible}" />
+        </VerticalStackLayout>
+    </Grid>
+</ContentPage>
