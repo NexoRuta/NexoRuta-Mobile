@@ -27,6 +27,14 @@ public partial class HojaRutaPage : ContentPage
         if (cuenta == modelo.Cuenta) Dispatcher.Dispatch(async () =>
         { if (!modelo.Ocupado) await modelo.Ejecutar(modelo.Refrescar); });
     }
+    private async void PrepararMapa(object? sender, EventArgs e)
+    {
+        if (modelo.Ocupado) return;
+        var parada = modelo.Hoja.Paradas.OrderBy(p => p.Orden).First();
+        await Navigation.PushAsync(new Mapas.MapaDestinoPage(servicios.GetRequiredService<Mapas.IProveedorMapas>().Crear(),
+            servicios.GetRequiredService<NexoRuta.Mobile.Application.Mapas.ServicioPreparacionMapa>(),
+            modelo.Cuenta, modelo.Hoja, parada));
+    }
     private async void AbrirParada(object? sender, SelectionChangedEventArgs e)
     {
         if (sender is CollectionView lista) lista.SelectedItem = null;

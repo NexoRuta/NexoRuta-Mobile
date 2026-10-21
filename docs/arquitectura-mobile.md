@@ -1,5 +1,7 @@
 # Arquitectura de NexoRuta Mobile
 
+Actualización operativa: [validación local y S21 del 20/10](validacion-local-s21.md). La integración parcial de CU-04 fija la publicación al crear el envío y descarga sus reglas en cada parada; se retiraron los intentos, pruebas y motivos duplicados de la configuración de reparto. El alcance y los límites están en [reglas del envío](reglas-envio.md). `VistaHoja` y `VistaParada` muestran cambios remotos sin modificar la hoja original ni los sobres causales pendientes.
+
 ## Estado y límites al 19/10/2026
 
 La app implementa los flujos de jornada en MAUI y los adaptadores Android. La API central conserva la autoridad sobre permisos, asignaciones, custodia y validación de entrega. Las pruebas controladas y la compilación no acreditan integración con Firebase, HTTPS, correo o mapas reales. La evidencia vigente y los pendientes están en [ejecución completa](ejecucion-completa.md).
@@ -128,3 +130,18 @@ El S21 tiene el USB averiado; se validó por ADB inalámbrico después de que el
 Esto comprueba compilación, instalación y UI de la plantilla, no el depurador de VS Code, Hot Reload ni los adaptadores futuros. iOS sigue sin compilación ni pruebas, por falta de Mac/Xcode/iPhone.
 
 La siguiente etapa debe completar los contratos operativos de T01, el perfil repartidor y las pruebas nativas restantes de T02. Para conectar el ingreso MVVM se necesita un origen HTTPS confiable, persistencia operativa y biometría. El backend y el cliente de identidad no acreditan T01 completa ni el ingreso MAUI. La cancelación pública mantiene el bloqueo D15 y la selección de Mapbox todavía requiere evaluación.
+
+## Integración parcial de reglas por envío
+
+La app consume la publicación capturada al crear cada envío, mediante `ParadaRuta.Reglas`. La configuración común de ruta conserva los parámetros propios de reparto. [Contrato, límites y preparación del entorno](reglas-envio.md).
+
+## Preparación cartográfica por jornada
+
+`ZonaMapa` calcula cobertura/huella; `ServicioPreparacionMapa` publica la preparación en el almacén cifrado existente y consulta `IProveedorMapaOffline`. La vista depende de `IProveedorMapas`. Android usa el mismo SDK Mapbox del control mediante un facade Java pequeño, con cancelación, espera de estilo/teselas y consulta al reabrir; no basta el callback de región del control. [Persistencia, recursos y limitaciones de plataforma](mapa-offline.md). No hubo cambios adicionales en CU-04 en este corte.
+
+
+## Registro de ubicación y desarrollo sin huella — 21/10/2026
+
+La coordinación de ubicación se trasladó al proyecto Application; Android e iOS conservan sus adaptadores nativos e inyectan el mismo servicio. El diario cifrado controla el intervalo tras reinicio, el inicio autorizado y el cierre atómico. [Reglas y evidencia](ubicacion-jornada.md).
+
+Por solicitud del usuario se agregó `OmitirVerificacionLocalParaDesarrollo`, con TODO para ponerlo en `false` antes de la aceptación biométrica. Solo vale con `ValidarAlmacenamiento=true`, compilación restringida al ID `uy.nexoruta.repartidor.validacion`. El ID habitual rechaza ese modo y el script de distribución fuerza `ValidarAlmacenamiento=false`. El atajo omite únicamente la comprobación local: no elimina el ingreso central ni concede permisos de API. Las pruebas realizadas con él no acreditan biometría.

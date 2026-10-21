@@ -12,14 +12,14 @@ public sealed class ControlNotificaciones(IRegistroPush registro, ServicioAvisos
         if (registro.MotivoNoDisponible is { } motivo) { Estado = motivo; return; }
         if (!await registro.SolicitarPermisoAsync())
         {
-            Estado = "Sin permiso para avisos. Consultá los cambios al sincronizar tu hoja.";
+            Estado = "Las notificaciones están desactivadas. Podés consultar las novedades en Avisos.";
             await ActualizarRegistroAsync(); return;
         }
         await registro.RegistrarAsync();
         await ActualizarRegistroAsync();
         Estado = await SecureStorage.Default.GetAsync(ClaveFid) is null
-            ? "Permiso concedido. Esperando que Firebase complete el registro."
-            : "Registro de avisos enviado al servidor.";
+            ? "Activando las notificaciones…"
+            : "Notificaciones activadas.";
     }
     public async Task RegistroRecibidoAsync(string fid)
     {
@@ -56,6 +56,6 @@ public sealed class ControlNotificaciones(IRegistroPush registro, ServicioAvisos
     {
         if (avisos is null) return;
         try { await avisos.GuardarReferenciaAsync(datos, abierto); }
-        catch { Estado = "No se pudo guardar la referencia del aviso. Revisá los cambios al sincronizar."; }
+        catch { Estado = "Hay una novedad en tu recorrido. Revisá tus avisos."; }
     }
 }

@@ -12,6 +12,7 @@ public sealed class ParadaRuta
     public string Direccion { get; init; } = "";
     public double Latitud { get; init; }
     public double Longitud { get; init; }
+    public ReglasEnvio Reglas { get; init; } = null!;
     public BultoRuta[] Bultos { get; init; } = [];
     public string Titulo => $"{Orden}. {Destinatario}";
     public string Resumen => $"{Bultos.Length} bulto(s) · {Estado}";

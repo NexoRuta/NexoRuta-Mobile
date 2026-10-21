@@ -17,4 +17,15 @@ public sealed record VistaParada(string Estado, bool Activa, long Version)
             vista = new(actual.Estado, actual.Activa && remota!.Estado != "Finalizada", actual.EnvioVersion);
         return vista;
     }
+
+    public static string DescribirSuspension(ParadaRuta original, HojaRuta? remota, IReadOnlySet<Guid> cargadosLocales)
+    {
+        var bultos = (remota?.Paradas.SingleOrDefault(p => p.EnvioId == original.EnvioId) ?? original).Bultos;
+        if (bultos.Any(b => cargadosLocales.Contains(b.Id) || b.Custodia == "Repartidor"))
+            return "Fuera de esta ruta · devolver en rendición";
+        if (bultos.Any(b => b.Custodia == "PendienteDeposito"))
+            return "Fuera de esta ruta · recepción en depósito pendiente";
+        return bultos.Length > 0 && bultos.All(b => b.Custodia == "Deposito")
+            ? "Fuera de esta ruta · en depósito" : "Fuera de esta ruta · revisar custodia";
+    }
 }

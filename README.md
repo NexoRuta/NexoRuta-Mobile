@@ -4,15 +4,25 @@ Aplicación del repartidor en .NET MAUI 10. Incluye ingreso central, desbloqueo 
 
 El [plan de implementación](docs/plan-implementacion.md) conserva las decisiones de producto y el avance por tareas. La [arquitectura](docs/arquitectura-mobile.md) explica las capas y los límites de confianza. La [ejecución y evidencia](docs/ejecucion-completa.md) distingue lo implementado, lo probado y lo pendiente.
 
-## Estado al 19/10/2026
+## Estado al 21/10/2026
 
 Backend implementa perfiles, reglas versionadas, rutas, custodia física y sincronización. Backoffice incluye planificación, despacho, recepción y reasignación. La reasignación conserva al custodio actual y encola un aviso dirigido a él; el nuevo despacho exige recepción física en depósito.
 
 El cliente Android registra FID y permisos, recibe avisos genéricos y consulta su vigencia después del desbloqueo. Las referencias se guardan cifradas; un push nunca cambia directamente el estado de un envío. Los cambios remotos se consultan sin reemplazar la hoja original usada para sincronizar trabajo pendiente. Al recuperar Internet o activar la app se reintentan los pendientes, incluidos cierres que ya no tienen GPS activo.
 
-**Firebase Android ya inicializa en el S21 y ADC tiene permiso de envío; faltan origen HTTPS, ejecución conectada de API/Worker, correo y token Mapbox.** No se acredita recepción push con la app cerrada ni operación móvil contra una API real. iOS está preparado parcialmente: el binding Firebase instalado no expone el registro por FID; ese adaptador y su validación requieren una versión compatible y recursos Apple. El cierre/cambio de cuenta protegido está implementado y probado con HTTP controlado y almacenamiento real; falta comprobarlo desde el S21 contra HTTPS. La cancelación pública por código al correo obligatorio está implementada con pruebas controladas y transporte RabbitMQ; falta SMTP real. La conciliación automática conserva una entrega física offline concurrente con cancelación/reprogramación, sin decisión del despachador. La geocodificación sigue pendiente. No confundir APK compilado con aceptación completa del plan.
+**Entorno local HTTPS/API/Worker/RabbitMQ/Mailpit en ejecución, con base aislada.** Se comprobaron ingreso y descarga en el S21, registro FID, reasignación con el proceso de la app cerrado, envío FCM real y notificación publicada en Android. El usuario completó el desbloqueo local; recepción, apertura y confirmación quedaron persistidas por separado. [Evidencia y límites](docs/validacion-local-s21.md).
+
+La [preparación del mapa offline](docs/mapa-offline.md) conserva el estado por cuenta/hoja, comprueba estilo y teselas y protege la descarga anterior ante fallos. La confirmación de salida exige mapa preparado. Sin token, se informa la dependencia; la recepción/descarga real y el puente offline iOS siguen pendientes.
+
+La geocodificación usa Geoapify Free detrás de interfaz; Comercio elige y confirma/corrige el destino. Falta clave propia de Geoapify y token público Mapbox para validar proveedores reales y mapa offline. El circuito de correo/cancelación se probó localmente en Mailpit, sin SMTP externo. Cierre de jornada con faltantes registra incidencias inmutables y conserva custodia hasta recepción física en depósito. iOS está preparado parcialmente y mantiene dependencias de binding FID, Firebase/APNs y recursos Apple.
+
+La [integración parcial de CU-04](docs/reglas-envio.md) fija las reglas al crear cada envío y las descarga por parada; se verificó ingreso, descarga y detalle en una variante separada del S21. Quedan aceptación operativa móvil completa, mapa offline y firma/infraestructura de distribución. No confundir el ensayo FCM con un despliegue de producción ni con la aceptación integral del plan.
 
 La compilación Android Release ARM64 conserva tres advertencias Mapbox sobre páginas nativas de 16 KB para Android 16. La firma actual es de desarrollo; la firma de distribución sigue pendiente.
+
+La [ubicación de jornada](docs/ubicacion-jornada.md) tiene prueba S21 de inicio, diez puntos con intervalo observado de 30,00–30,33 segundos, recuperación tras interrumpir HTTPS y cierre que detiene el servicio. Falta medición prolongada con pantalla apagada y batería.
+
+Para facilitar el desarrollo, la variante **NexoRuta Validación** omite temporalmente huella/credencial local mediante `OmitirVerificacionLocalParaDesarrollo` en `Seguridad/VerificacionLocal.cs`, con TODO para devolverlo a `false` antes de repetir la aceptación biométrica. Requiere `ValidarAlmacenamiento=true` y el ID de variante; el ID habitual rechaza ese modo y distribución lo desactiva. El ingreso central sigue siendo obligatorio. [Compilación y límites](docs/ci-distribucion.md).
 
 ## Estructura
 
@@ -27,10 +37,9 @@ Android requiere API 30 (Android 11); iOS, 15. La app se llama **NexoRuta Repart
 
 ## Requisitos
 
-- .NET SDK 10 y workloads de .NET MAUI para el destino elegido. En el checkout combinado, `global.json` de la raíz selecciona SDK `10.0.401`; el submódulo aislado no trae ese selector.
+- .NET SDK 10 y workloads de .NET MAUI para el destino elegido. En el checkout combinado, `global.json` de la raíz selecciona SDK `10.0.401`; el submódulo mobile conserva el mismo selector para su CI aislada.
 - Android: Android SDK y emulador/dispositivo configurados para ejecutar.
-- iOS/MacCatalyst: macOS y herramientas Apple/Xcode compatibles.
-- Windows: Windows y el workload/SDK de Windows correspondiente.
+- iOS: macOS y herramientas Apple/Xcode compatibles.
 
 ### Ubuntu y VS Code
 
@@ -63,6 +72,10 @@ adb devices -l
 ```
 
 El puerto de conexión está en la pantalla principal de depuración inalámbrica y puede ser distinto del de emparejamiento. No guardar direcciones ni códigos temporales en el repositorio. Antes de ejecutar, el dispositivo debe figurar como `device` en `adb devices -l`.
+
+## Entorno local y CI
+
+[Arranque HTTPS, correo de prueba y S21 por Wi-Fi](tools/local/README.md). [CI y comandos de firma](docs/ci-distribucion.md).
 
 ## Compilar y comprobar
 
@@ -110,3 +123,7 @@ La API se fija al compilar mediante `-p:NexoRutaApiOrigin=https://api.su-dominio
 Para Android, usar `-p:NexoRutaFirebaseAndroidConfig=/ruta/externa/google-services.json`, correspondiente a `uy.nexoruta.repartidor`. La compilación falla si se indicó una ruta inexistente. El archivo se mantiene fuera del repositorio; sin configuración, la app informa la dependencia y conserva la operación local.
 
 Mapbox usa `-p:NexoRutaMapboxPublicToken=pk.SU_TOKEN_PUBLICO`. El token público forma parte del cliente; las credenciales administrativas de Firebase y las claves de cifrado pertenecen exclusivamente a backend/Worker. Revisar [push y reasignación](docs/push-reasignacion.md) antes de configurar o demostrar notificaciones remotas.
+
+## Una sola aplicación instalada
+
+Usar **NexoRuta Repartidor** (`uy.nexoruta.repartidor`) tanto en desarrollo como en las pruebas del teléfono. Actualizar la instalación existente; no crear ni instalar aplicaciones auxiliares con otro ID. La configuración de entorno puede cambiar sin cambiar la identidad de la app. Las referencias históricas a «NexoRuta Validación» describen ensayos anteriores, no el procedimiento vigente.

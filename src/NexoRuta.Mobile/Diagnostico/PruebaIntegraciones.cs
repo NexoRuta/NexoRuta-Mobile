@@ -17,6 +17,16 @@ internal static class PruebaIntegraciones
             byte[]? imagen = null;
             try
             {
+                if (fase == "mapa-adaptador")
+                {
+                    using var estado = System.Text.Json.JsonDocument.Parse(Mapas.MapboxOfflineAndroid.Progress("nexoruta-" + Guid.Empty.ToString("N")));
+                    if (estado.RootElement.GetProperty("phase").GetString() != "missing") throw new InvalidDataException();
+                    using var fondo = System.Text.Json.JsonDocument.Parse(await Task.Run(() =>
+                        Mapas.MapboxOfflineAndroid.Progress("nexoruta-" + Guid.Empty.ToString("N"))));
+                    if (fondo.RootElement.GetProperty("phase").GetString() != "missing") throw new InvalidDataException();
+                    global::Android.Util.Log.Info(Tag, "MAPA_PUENTE_JNI_FONDO_OK_SIN_DESCARGA");
+                    return;
+                }
                 var servicios = IPlatformApplication.Current!.Services;
                 var navegacion = Microsoft.Maui.Controls.Application.Current!.Windows[0].Page!.Navigation;
                 if (fase == "biometria")

@@ -3,7 +3,7 @@ using Android.Content;
 using Android.Content.PM;
 using Android.Locations;
 using Android.OS;
-using NexoRuta.Mobile.Ubicacion;
+using NexoRuta.Mobile.Application.Ubicacion;
 namespace NexoRuta.Mobile.Platforms.Android;
 
 [Service(Exported = false, ForegroundServiceType = ForegroundService.TypeLocation)]

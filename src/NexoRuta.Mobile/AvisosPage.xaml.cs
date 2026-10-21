@@ -17,7 +17,7 @@ public partial class AvisosPage : ContentPage
     private AvisoReparto? seleccionado;
     private HojaRuta? remota;
     private bool disponible = true;
-    private string mensaje = "Revisá los cambios antes de continuar con una entrega.";
+    private string mensaje = "Los avisos te ayudan a continuar con el recorrido correcto.";
     public ObservableCollection<AvisoResumen> Avisos { get; } = [];
     public bool Disponible { get => disponible; private set { disponible = value; OnPropertyChanged(); } }
     public string Mensaje { get => mensaje; private set { mensaje = value; OnPropertyChanged(); } }
@@ -49,7 +49,7 @@ public partial class AvisosPage : ContentPage
         var resultado = await servicio.AbrirAsync(cuenta, id);
         seleccionado = resultado.Aviso; remota = resultado.Hoja;
         Detalle.Text = seleccionado.Vigente
-            ? $"{seleccionado.Motivo}\nSi todavía no entregaste el paquete, suspendé la entrega y rendí el bulto al volver al depósito. Si ya lo recibió el destinatario, conservá la declaración de entrega: cualquier devolución es un trámite posterior."
+            ? $"{seleccionado.Motivo}\nEste envío salió de tu recorrido. Si lo tenés cargado, devolvelo al depósito. Si ya lo entregaste, conservá su registro."
             : "Este aviso ya no está vigente. Revisá el estado actual de tu hoja.";
         VerHoja.IsVisible = remota is not null && seleccionado.Vigente;
         Entendido.IsVisible = seleccionado.ConfirmadoEnUtc is null;
@@ -64,7 +64,7 @@ public partial class AvisosPage : ContentPage
     {
         if (seleccionado is null) return;
         await servicio.ConfirmarAsync(cuenta, seleccionado.Id);
-        Entendido.IsVisible = false; Mensaje = "Aviso confirmado. La rendición en tu hoja solo incluye bultos no entregados.";
+        Entendido.IsVisible = false; Mensaje = "Aviso confirmado. Podés continuar con tu recorrido.";
         await Listar();
     });
     private async void AbrirHoja(object? sender, EventArgs e) => await Ejecutar(async () =>
@@ -80,8 +80,8 @@ public partial class AvisosPage : ContentPage
         Disponible = false;
         try { await accion(); }
         catch (SesionMovilException ex) { Mensaje = ex.Message; }
-        catch (HttpRequestException) { Mensaje = "Sin conexión. El aviso queda pendiente; tu trabajo local se conserva."; }
-        catch (Exception) { Mensaje = "No se pudo consultar el aviso. Tu trabajo local se conserva."; }
+        catch (HttpRequestException) { Mensaje = "No pudimos actualizar los avisos. Volvé a intentarlo en un momento."; }
+        catch (Exception) { Mensaje = "No pudimos consultar este aviso. Volvé a intentarlo."; }
         finally { Disponible = true; }
     }
 }

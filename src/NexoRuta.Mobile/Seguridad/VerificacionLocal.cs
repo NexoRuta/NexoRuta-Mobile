@@ -4,11 +4,21 @@ namespace NexoRuta.Mobile.Seguridad;
 
 public sealed class VerificacionLocal : IVerificacionLocal
 {
+    // TODO: poner en false y repetir desbloqueo/rendición con biometría antes de cerrar la aceptación móvil.
+    // Solo la variante de desarrollo habilita este atajo; distribución exige la verificación del teléfono.
+    private static readonly bool OmitirVerificacionLocalParaDesarrollo =
+#if VALIDAR_ALMACENAMIENTO
+        true;
+#else
+        false;
+#endif
     private readonly SemaphoreSlim exclusividad = new(1, 1);
 
     public async Task<bool> VerificarAsync(string motivo, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(motivo);
+        ct.ThrowIfCancellationRequested();
+        if (OmitirVerificacionLocalParaDesarrollo) return true;
         await exclusividad.WaitAsync(ct);
         try
         {

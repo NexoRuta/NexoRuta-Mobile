@@ -1,4 +1,3 @@
-using NexoRuta.Mobile.Core.Rutas;
 using NexoRuta.Mobile.Presentacion;
 using NexoRuta.Mobile.Application;
 using NexoRuta.Mobile.Notificaciones;
@@ -18,6 +17,7 @@ public partial class MainPage : ContentPage
                 Dispatcher.Dispatch(async () =>
                 {
                     await AbrirPendiente();
+                    await modelo.ActualizarHojaAsync();
                     try { await control.ActualizarRegistroAsync(); } catch { /* La jornada no depende del transporte push. */ }
                 });
         };
@@ -35,12 +35,13 @@ public partial class MainPage : ContentPage
     {
         base.OnAppearing();
         if (!inicializada) { inicializada = true; await modelo.InicializarAsync(); }
+        else await modelo.RefrescarLocalesAsync();
     }
     private async void AbrirHoja(object? sender, SelectionChangedEventArgs e)
     {
         if (sender is CollectionView lista) lista.SelectedItem = null;
-        if (e.CurrentSelection.FirstOrDefault() is HojaRuta hoja && modelo.PuedeOperar)
-            await Navigation.PushAsync(new HojaRutaPage(hoja, modelo.Cuenta, Handler!.MauiContext!.Services));
+        if (e.CurrentSelection.FirstOrDefault() is VistaHoja hoja && modelo.PuedeOperar)
+            await Navigation.PushAsync(new HojaRutaPage(hoja.Original, modelo.Cuenta, Handler!.MauiContext!.Services));
     }
     private async Task AbrirPendiente()
     {
@@ -54,6 +55,15 @@ public partial class MainPage : ContentPage
         }
         catch { /* La referencia cifrada queda pendiente para un siguiente desbloqueo. */ }
         finally { abriendoAviso = false; }
+    }
+    private async void CambiarFecha(object? sender, DateChangedEventArgs e)
+    {
+        await modelo.RefrescarLocalesAsync();
+        await modelo.ActualizarHojaAsync();
+    }
+    private async void AbrirCuenta(object? sender, EventArgs e)
+    {
+        if (modelo.PuedeOperar) await Navigation.PushAsync(new CuentaPage(modelo));
     }
     private async void AbrirAvisos(object? sender, EventArgs e)
     {

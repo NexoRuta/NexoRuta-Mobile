@@ -16,6 +16,9 @@ public sealed class ConfiguracionAplicacion
                 throw new InvalidOperationException("NexoRutaApiOrigin debe ser un origen HTTPS.");
             Api = api;
         }
+#if NEXORUTA_LOCAL_HTTPS
+        if (Api?.Host != "localhost") throw new InvalidOperationException("La CA de desarrollo solo se admite para una API en https://localhost.");
+#endif
         MapboxToken = valores.SingleOrDefault(x => x.Key == "NexoRutaMapboxPublicToken")?.Value;
         if (!string.IsNullOrEmpty(MapboxToken) && !MapboxToken.StartsWith("pk.", StringComparison.Ordinal))
             throw new InvalidOperationException("Mapbox requiere un token público.");

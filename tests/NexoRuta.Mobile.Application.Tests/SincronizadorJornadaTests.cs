@@ -203,8 +203,10 @@ public sealed class SincronizadorJornadaTests
             if (cerrar) Jornada.Finalizar(DateTimeOffset.UtcNow);
             var hoja = new HojaRuta { Id = Jornada.RutaId, JornadaId = Jornada.Id, RepartidorAccesoId = Cuenta.AccesoId,
                 VehiculoId = Guid.NewGuid(), Fecha = DateOnly.FromDateTime(DateTime.Today), Estado = "Despachada", Version = 1,
-                Politica = new() { Version = 1, ZonaHoraria = "America/Montevideo", MaximoIntentos = 3, Motivos = ["Ausente"] },
-                Paradas = [new() { EnvioId = Envio, Orden = 1, Activa = true, EnvioVersion = 2, Direccion = "Dirección de prueba",
+                Politica = new() { Version = 1, ZonaHoraria = "America/Montevideo" },
+                Paradas = [new() { Reglas = new() { VersionId = Guid.NewGuid(), NumeroVersion = 1, MaximoIntentos = 3,
+                IntervaloEntreIntentosMinutos = 1, PoliticaDevolucionAlAgotarIntentos = "DecisionOperativa",
+                RequiereFoto = true, RequiereNombre = true, Motivos = [new("AUSENTE", "Ausente")] }, EnvioId = Envio, Orden = 1, Activa = true, EnvioVersion = 2, Direccion = "Dirección de prueba",
                     Bultos = [new() { Id = Bulto, Codigo = "TEST" }] }] };
             await Datos.GuardarHojaAsync(Cuenta, hoja.Id, SerializadorHojaRuta.Serializar(hoja));
             await Datos.CrearAsync(Jornada);

@@ -17,6 +17,7 @@ public partial class EntregaPage : ContentPage
     }
     protected override async void OnAppearing() { base.OnAppearing(); if (!inicializada) { inicializada = true; await modelo.InicializarAsync(); } }
     private async void AbrirMapa(object? sender, EventArgs e) =>
-        await Navigation.PushAsync(new MapaDestinoPage(servicios.GetRequiredService<IProveedorMapas>().Crear(), hoja.Hoja, parada));
+        await Navigation.PushAsync(new MapaDestinoPage(servicios.GetRequiredService<IProveedorMapas>().Crear(),
+            servicios.GetRequiredService<NexoRuta.Mobile.Application.Mapas.ServicioPreparacionMapa>(), hoja.Cuenta, hoja.Hoja, parada));
     protected override void OnParentSet() { base.OnParentSet(); if (Parent is null) modelo?.Desconectar(); }
 }

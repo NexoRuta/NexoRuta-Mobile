@@ -13,9 +13,9 @@ public sealed class RegistroPushPlataforma : IRegistroPush
         {
 #if ANDROID
             return FirebaseApp.InitializeApp(Android.App.Application.Context) is null
-                ? "Las notificaciones aún no tienen un proyecto Firebase configurado." : null;
+                ? "Tu operador todavía no configuró las notificaciones." : null;
 #elif IOS
-            return "Push iOS requiere actualizar el binding Firebase para registro por FID y validarlo en Mac.";
+            return "Las notificaciones todavía no están disponibles en iOS.";
 #else
             return "Las notificaciones remotas no están preparadas para esta plataforma.";
 #endif
@@ -45,8 +45,12 @@ public sealed class RegistroPushPlataforma : IRegistroPush
     {
 #if ANDROID
         if (MotivoNoDisponible is not null || !await PermitidoAsync()) return;
-        FirebaseMessaging.Instance.AutoInitEnabled = true;
-        await FirebaseMessaging.Instance.Register().AsAsync();
+        // AutoInitEnabled también puede esperar por el FID; el SDK prohíbe hacerlo en el hilo de UI.
+        await Task.Run(async () =>
+        {
+            FirebaseMessaging.Instance.AutoInitEnabled = true;
+            await FirebaseMessaging.Instance.Register().AsAsync();
+        });
 #else
         await Task.CompletedTask;
 #endif

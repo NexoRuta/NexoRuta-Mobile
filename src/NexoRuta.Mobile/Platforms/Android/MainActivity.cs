@@ -10,7 +10,9 @@ public class MainActivity : MauiAppCompatActivity
     protected override void OnCreate(Bundle? savedInstanceState)
     {
         base.OnCreate(savedInstanceState);
+#if !VALIDAR_ALMACENAMIENTO
         Window?.AddFlags(Android.Views.WindowManagerFlags.Secure);
+#endif
         Platforms.Android.CanalesPush.Crear();
         RecibirApertura(Intent);
 #if VALIDAR_ALMACENAMIENTO

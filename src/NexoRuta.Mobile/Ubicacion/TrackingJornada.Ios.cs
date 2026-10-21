@@ -1,5 +1,6 @@
 #if IOS
 using CoreLocation;
+using NexoRuta.Mobile.Application.Ubicacion;
 namespace NexoRuta.Mobile.Ubicacion;
 public sealed partial class TrackingJornada
 {

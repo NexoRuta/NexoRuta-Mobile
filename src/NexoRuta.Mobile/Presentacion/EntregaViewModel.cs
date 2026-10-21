@@ -17,23 +17,28 @@ public sealed class EntregaViewModel : INotifyPropertyChanged
     private List<CapturaLocal> capturas = [];
     private Guid? fotoId, firmaId;
     private string nombre = "", documento = "", mensaje = "";
-    private string? motivo;
+    private MotivoNoEntrega? motivo;
     public ParadaRuta Parada { get; }
+    public string NumeroParada => $"PARADA {Parada.Orden}";
+    public string Bultos => TextoReparto.Bultos(Parada.Bultos.Length);
+    public string EstadoActual => TextoReparto.Estado(padre.EstadoPresentado(Parada));
+    public bool MostrarResultado => !PuedeRegistrar;
+    public string Indicacion => padre.Cerrada ? "Esta jornada ya finalizó. Podés consultar los datos de la parada." : !padre.Iniciada ? "Iniciá la jornada para comenzar con las entregas." : !padre.Salida ? "Verificá los bultos y comenzá el reparto desde tu hoja de ruta." : "Esta parada ya no requiere una entrega. Revisá las novedades de tu ruta.";
     public string Nombre { get => nombre; set { nombre = value; Cambiar(); } }
     public string Documento { get => documento; set { documento = value; Cambiar(); } }
-    public string? Motivo { get => motivo; set { motivo = value; Cambiar(); } }
+    public MotivoNoEntrega? Motivo { get => motivo; set { motivo = value; Cambiar(); } }
     public string Mensaje { get => mensaje; private set { mensaje = value; Cambiar(); } }
-    public bool MostrarNombre => padre.Hoja.Politica.RequiereNombre;
-    public bool MostrarDocumento => padre.Hoja.Politica.RequiereDocumento;
-    public bool MostrarFoto => padre.Hoja.Politica.RequiereFoto || padre.Hoja.Politica.RequiereFotoIntento || fotoId is not null;
-    public bool MostrarFirma => padre.Hoja.Politica.RequiereFirma || firmaId is not null;
+    public bool MostrarNombre => Parada.Reglas.RequiereNombre;
+    public bool MostrarDocumento => Parada.Reglas.RequiereDocumento;
+    public bool MostrarFoto => Parada.Reglas.RequiereFoto || padre.Hoja.Politica.RequiereFotoIntento || fotoId is not null;
+    public bool MostrarFirma => Parada.Reglas.RequiereFirma || firmaId is not null;
     public bool Ocupado => padre.Ocupado;
-    public string[] Motivos => padre.Hoja.Politica.Motivos;
+    public MotivoNoEntrega[] Motivos => Parada.Reglas.Motivos;
     public bool PuedeRegistrar => padre.Iniciada && padre.Salida && !padre.Cerrada && (padre.ParadaActiva(Parada) || padre.EntregaFisica(Parada.EnvioId)) && padre.Estado(Parada) is not ("Entregado" or "EntregaSinValidacion");
     public bool MostrarIntento => PuedeRegistrar && !padre.EntregaFisica(Parada.EnvioId);
-    public string AccionEntrega => padre.EntregaFisica(Parada.EnvioId) ? "Completar prueba de entrega" : "Declarar entrega física";
-    public string FotoEstado => fotoId is null ? "Sin foto" : capturas.Any(x => x.Id == fotoId && !x.Lista) ? "Foto interrumpida; volvé a capturarla." : "Foto guardada";
-    public string FirmaEstado => firmaId is null ? "Sin firma" : capturas.Any(x => x.Id == firmaId && !x.Lista) ? "Firma interrumpida; volvé a capturarla." : "Firma guardada";
+    public string AccionEntrega => padre.EntregaFisica(Parada.EnvioId) ? "Completar entrega" : "Confirmar entrega";
+    public string FotoEstado => fotoId is null ? "Pendiente" : capturas.Any(x => x.Id == fotoId && !x.Lista) ? "Foto interrumpida; volvé a capturarla." : "Lista";
+    public string FirmaEstado => firmaId is null ? "Pendiente" : capturas.Any(x => x.Id == firmaId && !x.Lista) ? "Firma interrumpida; volvé a capturarla." : "Lista";
     public bool QuitarFotoVisible => capturas.Any(x => x.Id == fotoId && x.OperacionId is null);
     public bool QuitarFirmaVisible => capturas.Any(x => x.Id == firmaId && x.OperacionId is null);
     public ComandoAsincrono TomarFoto { get; }
@@ -72,20 +77,20 @@ public sealed class EntregaViewModel : INotifyPropertyChanged
                     ? j.AdjuntarEvidencia(Parada.EnvioId, HojaRutaViewModel.Elemento(prueba), DateTimeOffset.UtcNow)
                     : j.RegistrarEntregaFisica(Parada.EnvioId, HojaRutaViewModel.Elemento(prueba), DateTimeOffset.UtcNow));
             await padre.IntentarSincronizar(); await CargarCapturas();
-            Mensaje = "La declaración está guardada. Si falta prueba exigida, queda pendiente hasta completar la evidencia o cerrar la jornada.";
+            Mensaje = padre.Estado(Parada) == "Entregado" ? "Entrega confirmada. Podés continuar con tu próxima parada." : "Entrega registrada. Completá las pruebas pendientes antes de terminar tu jornada.";
         }), () => PuedeRegistrar && !Ocupado);
         Intento = new(() => Ejecutar(async () =>
         {
-            if (Motivo is null || !Motivos.Contains(Motivo, StringComparer.Ordinal)) throw new InvalidOperationException("Seleccioná un motivo del operador.");
+            if (Motivo is null || !Motivos.Contains(Motivo)) throw new InvalidOperationException("Seleccioná un motivo del operador.");
             if (padre.Hoja.Politica.RequiereFotoIntento && (fotoId is null || capturas.Any(x => x.Id == fotoId && !x.Lista)))
                 throw new InvalidOperationException("El operador exige una foto para registrar el intento fallido.");
             var ubicacion = await UbicacionActual();
-            var prueba = new DatosOperacionMovil { Motivo = Motivo, FotoId = fotoId, Latitud = ubicacion?.Latitude,
+            var prueba = new DatosOperacionMovil { Motivo = Motivo.Codigo, FotoId = fotoId, Latitud = ubicacion?.Latitude,
                 Longitud = ubicacion?.Longitude, PrecisionMetros = ubicacion?.Accuracy, PosicionEnUtc = ubicacion?.Timestamp };
             var ids = capturas.Where(x => x.OperacionId is null && x.Id == fotoId).Select(x => x.Id).ToArray();
             await datos.RegistrarConCapturasAsync(padre.Cuenta, padre.Jornada!.Id, ids,
                 j => j.RegistrarIntento(Parada.EnvioId, HojaRutaViewModel.Elemento(prueba), DateTimeOffset.UtcNow));
-            fotoId = null; await padre.IntentarSincronizar(); await CargarCapturas(); Mensaje = "Intento guardado. " + padre.Resumen;
+            fotoId = null; await padre.IntentarSincronizar(); await CargarCapturas(); Mensaje = "Intento registrado.";
         }), () => MostrarIntento && !Ocupado);
         padre.PropertyChanged += PadreCambio;
     }
@@ -121,7 +126,7 @@ public sealed class EntregaViewModel : INotifyPropertyChanged
             if (anterior is null) id = (await evidencias.GuardarAsync(padre.Cuenta, padre.Jornada!.Id, Parada.EnvioId, tipo, contenido)).Id;
             else { await evidencias.CompletarAsync(padre.Cuenta, anterior, contenido); id = anterior.Id; }
             if (tipo == "Foto") fotoId = id; else firmaId = id;
-            await CargarCapturas(); Mensaje = "Borrador guardado de forma segura. Confirmá la declaración para asociarlo a la entrega.";
+            await CargarCapturas(); Mensaje = "Prueba lista. Confirmá la entrega para finalizar.";
         }
         finally { CryptographicOperations.ZeroMemory(contenido); }
     }
@@ -141,14 +146,14 @@ public sealed class EntregaViewModel : INotifyPropertyChanged
         {
             try { await operacion(); }
             catch (InvalidOperationException ex) { Mensaje = ex.Message; }
-            catch (Exception) { Mensaje = "No se completó la operación. Se conservan los registros y los borradores existentes."; }
+            catch (Exception) { Mensaje = "No pudimos completar la acción. Tu trabajo está guardado; volvé a intentarlo."; }
         });
         Actualizar();
     }
     public void Desconectar() => padre.PropertyChanged -= PadreCambio;
     private void Actualizar()
     {
-        foreach (var propiedad in new[] { nameof(Ocupado), nameof(PuedeRegistrar), nameof(MostrarIntento), nameof(AccionEntrega), nameof(FotoEstado), nameof(FirmaEstado), nameof(QuitarFotoVisible), nameof(QuitarFirmaVisible) }) Cambiar(propiedad);
+        foreach (var propiedad in new[] { nameof(Ocupado), nameof(PuedeRegistrar), nameof(EstadoActual), nameof(MostrarResultado), nameof(Indicacion), nameof(MostrarIntento), nameof(AccionEntrega), nameof(FotoEstado), nameof(FirmaEstado), nameof(QuitarFotoVisible), nameof(QuitarFirmaVisible) }) Cambiar(propiedad);
         TomarFoto?.Actualizar(); Firmar?.Actualizar(); QuitarFoto?.Actualizar(); QuitarFirma?.Actualizar(); Entregar?.Actualizar(); Intento?.Actualizar();
     }
     private void Cambiar([CallerMemberName] string? nombre = null) => PropertyChanged?.Invoke(this, new(nombre));

@@ -10,7 +10,8 @@ public sealed class InteraccionReparto : IInteraccionReparto
     {
         var page = new RendicionPage(bultos); await Actual.Navigation.PushAsync(page); return await page.Resultado;
     }
-    public Task<bool> ConfirmarCierreAsync(bool pruebaPendiente) => Actual.DisplayAlertAsync("Terminar jornada",
-        pruebaPendiente ? "Hay entregas con prueba pendiente o sin validación confirmada. El servidor evaluará su prueba al recibir el cierre, después de sincronizar los registros anteriores."
-            : "Se detendrá el seguimiento de ubicación y se enviará el cierre después de sincronizar los registros anteriores.", "Terminar jornada", "Seguir trabajando");
+    public Task<bool> ConfirmarCierreAsync(bool pruebaPendiente, int bultosSinRendir) => Actual.DisplayAlertAsync("Terminar jornada",
+        (bultosSinRendir > 0 ? $"Hay {bultosSinRendir} bulto(s) sin entrega ni rendición. Se registrará una incidencia y conservarás su custodia hasta la recepción física en depósito.\n\n" : "")
+        + (pruebaPendiente ? "Hay entregas con prueba pendiente o sin validación confirmada. El servidor evaluará su prueba al recibir el cierre, después de sincronizar los registros anteriores."
+            : "Se detendrá el seguimiento de ubicación y se enviará el cierre después de sincronizar los registros anteriores."), "Terminar jornada", "Seguir trabajando");
 }

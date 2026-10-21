@@ -177,8 +177,10 @@ public sealed class AvisosRepartoTests
         {
             Id = Aviso.RutaId, JornadaId = Jornada, RepartidorAccesoId = Cuenta.AccesoId, VehiculoId = Guid.NewGuid(),
             Fecha = new(2026, 10, 19), Estado = "EnCurso", Version = version,
-            Politica = new() { Version = 1, ZonaHoraria = "America/Montevideo", MaximoIntentos = 3, Motivos = ["Ausente"] },
-            Paradas = [new() { EnvioId = Aviso.EnvioId, Orden = 1, EnvioVersion = version, Estado = estado, Activa = activa,
+            Politica = new() { Version = 1, ZonaHoraria = "America/Montevideo" },
+            Paradas = [new() { Reglas = new() { VersionId = Guid.NewGuid(), NumeroVersion = 1, MaximoIntentos = 3,
+                IntervaloEntreIntentosMinutos = 1, PoliticaDevolucionAlAgotarIntentos = "DecisionOperativa",
+                RequiereFoto = true, RequiereNombre = true, Motivos = [new("AUSENTE", "Ausente")] }, EnvioId = Aviso.EnvioId, Orden = 1, EnvioVersion = version, Estado = estado, Activa = activa,
                 Direccion = "Dirección de prueba", Bultos = [new() { Id = Guid.NewGuid(), Codigo = "PRUEBA" }] }]
         };
         internal Escenario() => Datos = new(Raiz, Claves);

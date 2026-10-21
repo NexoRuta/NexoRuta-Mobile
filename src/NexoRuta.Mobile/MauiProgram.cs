@@ -15,6 +15,9 @@ public static class MauiProgram
 {
 	public static MauiApp CreateMauiApp()
 	{
+        var cultura = System.Globalization.CultureInfo.GetCultureInfo("es-UY");
+        System.Globalization.CultureInfo.DefaultThreadCurrentCulture = cultura;
+        System.Globalization.CultureInfo.DefaultThreadCurrentUICulture = cultura;
 		var builder = MauiApp.CreateBuilder();
         var configuracion = new ConfiguracionAplicacion();
         builder.Services.AddSingleton(configuracion);
@@ -24,6 +27,7 @@ public static class MauiProgram
             builder.Services.AddSingleton<NexoRuta.Mobile.Application.SincronizadorJornada>();
             builder.Services.AddSingleton<NexoRuta.Mobile.Application.ServicioAvisosReparto>();
             builder.Services.AddSingleton<NexoRuta.Mobile.Application.ServicioSesionTrabajo>();
+            builder.Services.AddSingleton<NexoRuta.Mobile.Application.ServicioHojasRuta>();
             builder.Services.AddSingleton<SincronizacionConectividad>();
         }
         if (!string.IsNullOrEmpty(configuracion.MapboxToken)) builder.UseMapbox(configuracion.MapboxToken, enableTelemetry: false);
@@ -33,9 +37,12 @@ public static class MauiProgram
         builder.Services.AddSingleton<MainPage>();
         builder.Services.AddSingleton<Captura.IInteraccionReparto, Captura.InteraccionReparto>();
         builder.Services.AddSingleton<Ubicacion.ITrackingJornada, Ubicacion.TrackingJornada>();
-        builder.Services.AddSingleton<Ubicacion.RegistroUbicacion>();
+        builder.Services.AddSingleton<NexoRuta.Mobile.Application.Ubicacion.RegistroUbicacion>();
         builder.Services.AddSingleton<NexoRuta.Mobile.Application.EvidenciasLocales>();
-        builder.Services.AddSingleton<Mapas.IProveedorMapas, Mapas.ProveedorMapbox>();
+        builder.Services.AddSingleton<Mapas.ProveedorMapbox>();
+        builder.Services.AddSingleton<Mapas.IProveedorMapas>(s => s.GetRequiredService<Mapas.ProveedorMapbox>());
+        builder.Services.AddSingleton<NexoRuta.Mobile.Application.Mapas.IProveedorMapaOffline>(s => s.GetRequiredService<Mapas.ProveedorMapbox>());
+        builder.Services.AddSingleton<NexoRuta.Mobile.Application.Mapas.ServicioPreparacionMapa>();
 		builder
 			.UseMauiApp<App>()
             .UseMauiCommunityToolkitCamera()

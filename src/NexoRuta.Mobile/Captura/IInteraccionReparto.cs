@@ -6,5 +6,5 @@ public interface IInteraccionReparto
     Task<byte[]?> FotoAsync();
     Task<byte[]?> FirmaAsync();
     Task<Guid[]?> SeleccionarRendicionAsync(IReadOnlyList<BultoRuta> bultos);
-    Task<bool> ConfirmarCierreAsync(bool pruebaPendiente);
+    Task<bool> ConfirmarCierreAsync(bool pruebaPendiente, int bultosSinRendir);
 }
