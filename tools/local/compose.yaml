@@ -1,0 +1,144 @@
+name: nexoruta-mobile-local
+x-api: &api
+  image: nexoruta-mobile-local-api
+  build:
+    context: ../../../backend
+    dockerfile: Dockerfile
+  environment: &api-env
+    ASPNETCORE_ENVIRONMENT: Development
+    DatabaseInitialization__ApplyMigrations: 'false'
+    DatabaseInitialization__SeedData: 'false'
+    Jwt__SigningKeyBase64: ${JWT_KEY:?}
+    ConnectionStrings__Postgres: Host=postgres;Database=nexoruta_mobile;Username=nexoruta_api_runtime;Password=${API_DB_PASSWORD:?}
+    DataProtection__KeysDirectory: /data/keys
+    Email__Smtp__Host: mailpit
+    Email__Smtp__Port: '1025'
+    Email__Smtp__FromAddress: noreply@mobile.nexoruta.test
+    PasswordRecovery__ResetPageUrl: http://localhost:5852/restablecer-contrasena
+    Tracking__PublicBaseUrl: https://localhost:5843
+    Seguimiento__EncryptionKey: ${TRACKING_KEY:?}
+    Push__RegistrationEncryptionKey: ${PUSH_KEY:?}
+    Reparto__EvidenciasEncryptionKey: ${EVIDENCE_KEY:?}
+    Geocoding__Geoapify__ApiKey: ${GEOAPIFY_API_KEY:-}
+    OpenTelemetry__Enabled: 'false'
+  volumes:
+    - keys:/data/keys
+  depends_on:
+    postgres: { condition: service_healthy }
+services:
+  postgres:
+    image: postgis/postgis:18-3.6-alpine
+    environment:
+      POSTGRES_DB: nexoruta_mobile
+      POSTGRES_USER: mobile_migrator
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+    volumes: [database:/var/lib/postgresql]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U mobile_migrator -d nexoruta_mobile']
+      interval: 3s
+      timeout: 3s
+      retries: 30
+  rabbitmq:
+    image: rabbitmq:4-management
+    environment:
+      RABBITMQ_DEFAULT_USER: nexoruta_local
+      RABBITMQ_DEFAULT_PASS: ${RABBIT_PASSWORD:?}
+    volumes: [rabbit:/var/lib/rabbitmq]
+    healthcheck:
+      test: [CMD, rabbitmq-diagnostics, -q, ping]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  mailpit:
+    image: axllent/mailpit:v1.27
+    ports: ['127.0.0.1:5855:8025']
+  migrate:
+    <<: *api
+    command: [database-migrate]
+    environment:
+      <<: *api-env
+      ConnectionStrings__Postgres: Host=postgres;Database=nexoruta_mobile;Username=mobile_migrator;Password=${POSTGRES_PASSWORD:?}
+    profiles: [preparacion]
+  runtime-roles:
+    image: postgis/postgis:18-3.6-alpine
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:?}
+      NEXORUTA_API_DB_PASSWORD: ${API_DB_PASSWORD:?}
+      NEXORUTA_WORKER_DB_PASSWORD: ${WORKER_DB_PASSWORD:?}
+      NEXORUTA_BOOTSTRAP_DB_PASSWORD: ${BOOTSTRAP_DB_PASSWORD:?}
+    volumes: ['../../../backend/scripts/provision-rls-runtime-roles.sql:/provision.sql:ro']
+    command: [psql, -v, ON_ERROR_STOP=1, -h, postgres, -U, mobile_migrator, -d, nexoruta_mobile, -f, /provision.sql]
+    profiles: [preparacion]
+    depends_on:
+      postgres: { condition: service_healthy }
+  bootstrap:
+    <<: *api
+    command: [local-bootstrap]
+    environment:
+      <<: *api-env
+      ConnectionStrings__Postgres: Host=postgres;Database=nexoruta_mobile;Username=nexoruta_bootstrap_runtime;Password=${BOOTSTRAP_DB_PASSWORD:?}
+    volumes:
+      - keys:/data/keys
+      - '${NEXORUTA_LOCAL_DIR:?}/bootstrap.json:/app/appsettings.Development.json:ro'
+    profiles: [preparacion]
+  api:
+    <<: *api
+    ports: ['127.0.0.1:5841:8080']
+    healthcheck:
+      test: [CMD-SHELL, 'curl -fsS http://localhost:8080/health/ready >/dev/null']
+      interval: 5s
+      timeout: 3s
+      retries: 30
+  https:
+    image: nginx:1.28-alpine
+    ports: ['127.0.0.1:5843:443']
+    volumes:
+      - './nginx.conf:/etc/nginx/nginx.conf:ro'
+      - '${NEXORUTA_LOCAL_DIR:?}/tls/server.crt:/certs/server.crt:ro'
+      - '${NEXORUTA_LOCAL_DIR:?}/tls/server.key:/certs/server.key:ro'
+    depends_on:
+      api: { condition: service_healthy }
+  worker:
+    image: nexoruta-mobile-local-worker
+    build:
+      context: ../../../backend
+      args:
+        PROJECT: src/NexoRuta.Worker/NexoRuta.Worker.csproj
+        RUNTIME_IMAGE: mcr.microsoft.com/dotnet/aspnet:10.0
+    entrypoint: [dotnet, NexoRuta.Worker.dll]
+    environment: &worker-env
+      DOTNET_ENVIRONMENT: Development
+      ConnectionStrings__Postgres: Host=postgres;Database=nexoruta_mobile;Username=nexoruta_worker_runtime;Password=${WORKER_DB_PASSWORD:?}
+      Messaging__Transport: RabbitMq
+      RabbitMq__Host: rabbitmq
+      RabbitMq__Username: nexoruta_local
+      RabbitMq__Password: ${RABBIT_PASSWORD:?}
+      DataProtection__KeysDirectory: /data/keys
+      Email__Smtp__Host: mailpit
+      Email__Smtp__Port: '1025'
+      Email__Smtp__FromAddress: noreply@mobile.nexoruta.test
+      Seguimiento__EncryptionKey: ${TRACKING_KEY:?}
+      Tracking__PublicBaseUrl: https://localhost:5843
+    volumes: [keys:/data/keys]
+    depends_on:
+      rabbitmq: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+      mailpit: { condition: service_started }
+  worker-push:
+    image: nexoruta-mobile-local-worker
+    entrypoint: [dotnet, NexoRuta.Worker.dll]
+    environment:
+      <<: *worker-env
+      Messaging__Transport: Push
+      Push__ProjectId: nexoruta-mobile
+      Push__RegistrationEncryptionKey: ${PUSH_KEY:?}
+      GOOGLE_APPLICATION_CREDENTIALS: /run/adc.json
+    volumes: ['${NEXORUTA_GOOGLE_ADC_FILE:?}:/run/adc.json:ro']
+    profiles: [push]
+    depends_on:
+      postgres: { condition: service_healthy }
+volumes:
+  database:
+    name: nexoruta-mobile-local_database_cu04
+  keys:
+  rabbit:

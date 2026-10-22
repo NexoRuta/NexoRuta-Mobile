@@ -1,0 +1,1 @@
+-keep class uy.nexoruta.offline.MapboxOffline { public static *; }

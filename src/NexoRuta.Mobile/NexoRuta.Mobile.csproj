@@ -1,16 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFrameworks>net10.0-android</TargetFrameworks>
-		<TargetFrameworks Condition="!$([MSBuild]::IsOSPlatform('linux'))">$(TargetFrameworks);net10.0-ios;net10.0-maccatalyst</TargetFrameworks>
-		<TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net10.0-windows10.0.19041.0</TargetFrameworks>
-
-		<!-- Note for MacCatalyst:
-		The default runtime is maccatalyst-x64, except in Release config, in which case the default is maccatalyst-x64;maccatalyst-arm64.
-		When specifying both architectures, use the plural <RuntimeIdentifiers> instead of the singular <RuntimeIdentifier>.
-		The Mac App Store will NOT accept apps with ONLY maccatalyst-arm64 indicated;
-		either BOTH runtimes must be indicated or ONLY macatalyst-x64. -->
-		<!-- For example: <RuntimeIdentifiers>maccatalyst-x64;maccatalyst-arm64</RuntimeIdentifiers> -->
+        <TargetFrameworks>net10.0-android</TargetFrameworks>
+        <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('osx'))">net10.0-android;net10.0-ios</TargetFrameworks>
 
 		<OutputType>Exe</OutputType>
 		<RootNamespace>NexoRuta.Mobile</RootNamespace>
@@ -18,6 +10,7 @@
 		<SingleProject>true</SingleProject>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
+		<MauiVersion>10.0.60</MauiVersion>
 
 		<!-- Enable XAML source generation for faster build times and improved performance.
 		     This generates C# code from XAML at compile time instead of runtime inflation.
@@ -28,31 +21,51 @@
 		<MauiXamlInflator>SourceGen</MauiXamlInflator>
 
 		<!-- Display name -->
-		<ApplicationTitle>NexoRuta.Mobile</ApplicationTitle>
+		<ApplicationTitle>NexoRuta Repartidor</ApplicationTitle>
 
 		<!-- App Identifier -->
-		<ApplicationId>com.companyname.nexoruta.mobile</ApplicationId>
+		<ApplicationId>uy.nexoruta.repartidor</ApplicationId>
 
 		<!-- Versions -->
 		<ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
 		<ApplicationVersion>1</ApplicationVersion>
 
-		<!-- To develop, package, and publish an app to the Microsoft Store, see: https://aka.ms/MauiTemplateUnpackaged -->
-		<WindowsPackageType>None</WindowsPackageType>
 
 		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
-		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">17.0</SupportedOSPlatformVersion>
-		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">21.0</SupportedOSPlatformVersion>
-		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
-		<TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
+		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">30.0</SupportedOSPlatformVersion>
 	</PropertyGroup>
+	<PropertyGroup Condition="'$(ValidarAlmacenamiento)' == 'true'">
+		<DefineConstants>$(DefineConstants);VALIDAR_ALMACENAMIENTO</DefineConstants>
+	</PropertyGroup>
+    <Target Name="ValidarVarianteDeDesarrollo" BeforeTargets="PrepareForBuild"
+        Condition="'$(ValidarAlmacenamiento)' == 'true'">
+        <Error Condition="'$(ApplicationId)' != 'uy.nexoruta.repartidor.validacion'"
+            Text="Los diagnósticos y el desbloqueo temporal solo se admiten en uy.nexoruta.repartidor.validacion." />
+    </Target>
+	<ItemGroup Condition="'$(ValidarAlmacenamiento)' == 'true'">
+		<MauiAsset Include="Resources/Images/dotnet_bot.png" LogicalName="prueba-almacenamiento.png" />
+	</ItemGroup>
 
+    <PropertyGroup Condition="'$(NexoRutaAndroidDevelopmentCa)' != '' And $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+        <DefineConstants>$(DefineConstants);NEXORUTA_LOCAL_HTTPS</DefineConstants>
+    </PropertyGroup>
+    <ItemGroup Condition="'$(NexoRutaAndroidDevelopmentCa)' != '' And $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+        <AndroidResource Include="$(NexoRutaAndroidDevelopmentCa)" Link="Resources/raw/nexoruta_development_ca.crt" />
+        <AndroidResource Include="ConfiguracionLocal/network_security_config.xml" Link="Resources/xml/nexoruta_local_network_security.xml" />
+    </ItemGroup>
+    <Target Name="ValidarCertificadoDesarrollo" BeforeTargets="PrepareForBuild" Condition="'$(NexoRutaAndroidDevelopmentCa)' != ''">
+        <Error Condition="!Exists('$(NexoRutaAndroidDevelopmentCa)')" Text="No existe el certificado público de la CA local indicado." />
+    </Target>
+    <ItemGroup>
+        <AssemblyMetadata Include="NexoRutaApiOrigin" Value="$(NexoRutaApiOrigin)" />
+        <AssemblyMetadata Include="NexoRutaMapboxPublicToken" Value="$(NexoRutaMapboxPublicToken)" />
+    </ItemGroup>
 	<ItemGroup>
 		<!-- App Icon -->
-		<MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#512BD4" />
+		<MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#0D6EFD" />
 
 		<!-- Splash Screen -->
-		<MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#512BD4" BaseSize="128,128" />
+		<MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#0D6EFD" BaseSize="128,128" />
 
 		<!-- Images -->
 		<MauiImage Include="Resources\Images\*" />
@@ -68,6 +81,35 @@
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
 		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
+		<PackageReference Include="CommunityToolkit.Maui.Camera" Version="6.1.0" />
+        <PackageReference Include="ZXing.Net.Maui.Controls" Version="0.10.4" />
+		<PackageReference Include="Indiko.Maui.Controls.MapBox" Version="1.8.0" />
+	</ItemGroup>
+	<ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+        <AndroidJavaSource Include="Platforms/Android/Mapas/MapboxOffline.java" />
+        <ProguardConfiguration Include="Platforms/Android/Mapas/mapbox-offline.pro" />
+		<GoogleServicesJson Include="$(NexoRutaFirebaseAndroidConfig)" Condition="'$(NexoRutaFirebaseAndroidConfig)' != '' And Exists('$(NexoRutaFirebaseAndroidConfig)')" />
+		<PackageReference Include="Xamarin.Firebase.Messaging" Version="125.1.3" />
+        <PackageReference Include="Xamarin.AndroidX.Lifecycle.LiveData" Version="2.11.0.1" />
+        <PackageReference Include="Xamarin.AndroidX.Lifecycle.Process" Version="2.11.0.1" />
+        <PackageReference Include="Xamarin.AndroidX.Lifecycle.LiveData.Core.Ktx" Version="2.11.0.1" />
+        <PackageReference Include="Xamarin.AndroidX.Fragment.Ktx" Version="1.9.0" />
+        <PackageReference Include="Xamarin.AndroidX.Collection.Ktx" Version="1.6.0.1" />
+        <PackageReference Include="Xamarin.AndroidX.Tracing.Tracing.Ktx" Version="2.0.0" />
+	</ItemGroup>
+
+    <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">
+        <PackageReference Include="AdamE.Firebase.iOS.CloudMessaging" Version="12.10.0" />
+    </ItemGroup>
+    <Target Name="ValidarConfiguracionFirebase" BeforeTargets="PrepareForBuild"
+        Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android' And '$(NexoRutaFirebaseAndroidConfig)' != ''">
+        <Error Condition="!Exists('$(NexoRutaFirebaseAndroidConfig)')" Text="No existe el archivo Firebase indicado en NexoRutaFirebaseAndroidConfig." />
+    </Target>
+	<ItemGroup>
+		<ProjectReference Include="..\NexoRuta.Mobile.Core\NexoRuta.Mobile.Core.csproj" />
+        <ProjectReference Include="..\NexoRuta.Mobile.Application\NexoRuta.Mobile.Application.csproj" />
+		<ProjectReference Include="..\NexoRuta.Mobile.Api\NexoRuta.Mobile.Api.csproj" />
+		<ProjectReference Include="..\NexoRuta.Mobile.Storage\NexoRuta.Mobile.Storage.csproj" />
 	</ItemGroup>
 
 </Project>

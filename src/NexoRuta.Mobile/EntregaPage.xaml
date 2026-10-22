@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui" xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml" xmlns:vm="clr-namespace:NexoRuta.Mobile.Presentacion" x:Class="NexoRuta.Mobile.EntregaPage" x:DataType="vm:EntregaViewModel" Title="Detalle de parada">
+ <ScrollView><VerticalStackLayout Padding="20,12,20,28" Spacing="18">
+  <Border Style="{StaticResource Card}"><VerticalStackLayout Spacing="14">
+   <Grid ColumnDefinitions="*,Auto"><Label Text="{Binding NumeroParada}" Style="{StaticResource Eyebrow}" /><Border Grid.Column="1" Padding="10,5" StrokeThickness="0" BackgroundColor="{StaticResource Secondary}" StrokeShape="RoundRectangle 8"><Label Text="{Binding EstadoActual}" TextColor="{StaticResource Tertiary}" FontSize="12" FontFamily="OpenSansSemibold" /></Border></Grid>
+   <Label Text="{Binding Parada.Destinatario}" FontSize="25" FontFamily="OpenSansSemibold" />
+   <Grid ColumnDefinitions="22,*" ColumnSpacing="10"><Image Source="ic_pin.png" HeightRequest="22" WidthRequest="22" VerticalOptions="Start" /><Label Grid.Column="1" Text="{Binding Parada.Direccion}" FontSize="16" LineHeight="1.2" /></Grid>
+   <Label Text="{Binding Bultos}" Style="{StaticResource Caption}" />
+   <Button Text="Ver destino" Clicked="AbrirMapa" Style="{StaticResource SecondaryButton}" />
+  </VerticalStackLayout></Border>
+  <Border Style="{StaticResource Notice}" IsVisible="{Binding Mensaje, Converter={StaticResource TieneTexto}}"><Label Text="{Binding Mensaje}" FontSize="14" /></Border>
+  <ActivityIndicator IsVisible="{Binding Ocupado}" IsRunning="{Binding Ocupado}" />
+  <Border Style="{StaticResource Notice}" IsVisible="{Binding MostrarResultado}"><Label Text="{Binding Indicacion}" /></Border>
+  <VerticalStackLayout IsVisible="{Binding PuedeRegistrar}" Spacing="18">
+   <VerticalStackLayout Spacing="6"><Label Text="Registrar entrega" Style="{StaticResource SectionTitle}" /><Label Text="Completá los datos del receptor y las pruebas solicitadas por tu operador." Style="{StaticResource Caption}" /></VerticalStackLayout>
+   <Border Style="{StaticResource Card}"><VerticalStackLayout Spacing="16">
+    <VerticalStackLayout IsVisible="{Binding MostrarNombre}" Spacing="6"><Label Text="Nombre del receptor" FontSize="13" FontFamily="OpenSansSemibold" /><Border Style="{StaticResource InputFrame}"><Entry Text="{Binding Nombre}" Placeholder="Nombre y apellido" MaxLength="160" /></Border></VerticalStackLayout>
+    <VerticalStackLayout IsVisible="{Binding MostrarDocumento}" Spacing="6"><Label Text="Documento del receptor" FontSize="13" FontFamily="OpenSansSemibold" /><Border Style="{StaticResource InputFrame}"><Entry Text="{Binding Documento}" Placeholder="Número de documento" MaxLength="40" /></Border></VerticalStackLayout>
+    <VerticalStackLayout IsVisible="{Binding MostrarFoto}" Spacing="8"><Grid ColumnDefinitions="*,Auto"><Label Text="Foto de entrega" FontFamily="OpenSansSemibold" /><Label Grid.Column="1" Text="{Binding FotoEstado}" Style="{StaticResource Caption}" /></Grid><Button Text="Tomar foto" Command="{Binding TomarFoto}" Style="{StaticResource SecondaryButton}" /><Button Text="Quitar foto" IsVisible="{Binding QuitarFotoVisible}" Command="{Binding QuitarFoto}" Style="{StaticResource TextButton}" /></VerticalStackLayout>
+    <VerticalStackLayout IsVisible="{Binding MostrarFirma}" Spacing="8"><Grid ColumnDefinitions="*,Auto"><Label Text="Firma del receptor" FontFamily="OpenSansSemibold" /><Label Grid.Column="1" Text="{Binding FirmaEstado}" Style="{StaticResource Caption}" /></Grid><Button Text="Capturar firma" Command="{Binding Firmar}" Style="{StaticResource SecondaryButton}" /><Button Text="Quitar firma" IsVisible="{Binding QuitarFirmaVisible}" Command="{Binding QuitarFirma}" Style="{StaticResource TextButton}" /></VerticalStackLayout>
+   </VerticalStackLayout></Border>
+   <Label Text="¿Falta una prueba? Podés confirmar que entregaste el paquete y completarla antes de terminar tu jornada." Style="{StaticResource Caption}" />
+   <Button Text="{Binding AccionEntrega}" Command="{Binding Entregar}" />
+   <Border Style="{StaticResource Card}" IsVisible="{Binding MostrarIntento}"><VerticalStackLayout Spacing="14"><Label Text="¿No pudiste entregar?" Style="{StaticResource SectionTitle}" /><Label Text="Elegí el motivo para dejar registrado el intento." Style="{StaticResource Caption}" /><Border Style="{StaticResource InputFrame}"><Picker Title="Seleccionar motivo" ItemsSource="{Binding Motivos}" ItemDisplayBinding="{Binding Descripcion}" SelectedItem="{Binding Motivo}" /></Border><Button Text="Registrar intento" Command="{Binding Intento}" Style="{StaticResource SecondaryButton}" /></VerticalStackLayout></Border>
+  </VerticalStackLayout>
+ </VerticalStackLayout></ScrollView>
+</ContentPage>

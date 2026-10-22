@@ -6,9 +6,4 @@
     xmlns:local="clr-namespace:NexoRuta.Mobile"
     Title="NexoRuta.Mobile">
 
-    <ShellContent
-        Title="Home"
-        ContentTemplate="{DataTemplate local:MainPage}"
-        Route="MainPage" />
-
 </Shell>
