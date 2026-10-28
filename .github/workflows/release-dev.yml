@@ -140,7 +140,7 @@ jobs:
 
           - Android ARM64; firma de desarrollo estable para las siguientes versiones de desarrollo.
           - No es una distribución de producción ni está publicada en Play Store.
-          - Se conecta al origen API de la demo GCP: `$NEXORUTA_GCP_API_ORIGIN` (el backend debe estar activo).
+          - Se conecta al origen API de la demo GCP: $NEXORUTA_GCP_API_ORIGIN (el backend debe estar activo).
           - No incluye Firebase ni Mapbox; notificaciones push y el mapa requieren esas configuraciones aparte.
           - Verifica el archivo con SHA256SUMS antes de instalarlo.
           EOF
