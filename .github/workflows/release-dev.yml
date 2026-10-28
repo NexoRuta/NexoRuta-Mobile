@@ -73,9 +73,11 @@ jobs:
         id: version
         run: |
           version="1.0.0-dev.${GITHUB_RUN_NUMBER}"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "tag=mobile-v$version" >> "$GITHUB_OUTPUT"
-          echo "apk=NexoRuta-Repartidor-$version.apk" >> "$GITHUB_OUTPUT"
+          {
+            echo "version=$version"
+            echo "tag=mobile-v$version"
+            echo "apk=NexoRuta-Repartidor-$version.apk"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build signed Android ARM64 APK
         env:
