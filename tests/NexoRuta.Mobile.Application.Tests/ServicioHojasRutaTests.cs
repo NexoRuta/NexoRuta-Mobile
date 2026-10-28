@@ -86,9 +86,9 @@ public sealed class ServicioHojasRutaTests : IDisposable
     { protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) => responder(request, ct); }
     private sealed class Almacen(EstadoSesionMovil estado) : IAlmacenSesionMovil
     {
-        public Task<EstadoSesionMovil?> LeerAsync() => Task.FromResult<EstadoSesionMovil?>(estado);
+        public Task<EstadoSesionMovil?> LeerAsync(string api) => Task.FromResult<EstadoSesionMovil?>(estado);
         public Task GuardarAsync(EstadoSesionMovil nuevo) { estado = nuevo; return Task.CompletedTask; }
-        public Task EliminarAsync() => throw new NotSupportedException();
+        public Task EliminarAsync(string api) => throw new NotSupportedException();
     }
     private sealed class Claves : IAlmacenClavesProtegidas
     {

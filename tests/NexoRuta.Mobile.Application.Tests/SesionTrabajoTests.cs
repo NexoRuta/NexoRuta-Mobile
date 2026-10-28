@@ -144,9 +144,9 @@ public sealed class SesionTrabajoTests
     private sealed class Almacen(EstadoSesionMovil? estado) : IAlmacenSesionMovil
     {
         internal EstadoSesionMovil? Estado => estado;
-        public Task<EstadoSesionMovil?> LeerAsync() => Task.FromResult(estado);
+        public Task<EstadoSesionMovil?> LeerAsync(string api) => Task.FromResult(estado);
         public Task GuardarAsync(EstadoSesionMovil nuevo) { estado = nuevo; return Task.CompletedTask; }
-        public Task EliminarAsync() { estado = null; return Task.CompletedTask; }
+        public Task EliminarAsync(string api) { estado = null; return Task.CompletedTask; }
     }
     private sealed class Transporte(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> responder) : HttpMessageHandler
     { protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) => responder(request, ct); }

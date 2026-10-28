@@ -98,7 +98,7 @@ public sealed partial class ClienteSesionMovil : IDisposable
 
     private async Task<EstadoSesionMovil?> LeerAsync()
     {
-        var estado = await almacen.LeerAsync();
+        var estado = await almacen.LeerAsync(api.AbsoluteUri);
         if (estado is not null)
         {
             SerializadorSesionMovil.Validar(estado);

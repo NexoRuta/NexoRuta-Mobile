@@ -33,7 +33,7 @@ public sealed partial class ClienteSesionMovil
             using var salida = await PostAsync("api/auth/mobile/logout", new RenovacionRequest
                 { RefreshToken = estado.Tokens!.RefreshToken }, ContratosSesionJson.Default.RenovacionRequest, ct);
             ExigirSinContenido(salida);
-            await almacen.EliminarAsync();
+            await almacen.EliminarAsync(api.AbsoluteUri);
         }
         finally { exclusividad.Release(); }
     }

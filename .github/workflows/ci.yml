@@ -1,55 +1,104 @@
 name: Mobile CI
+run-name: Mobile CI / ${{ github.event.pull_request.number || github.ref_name }}
+
 on:
   push:
-    branches: [develop, main]
+    branches: [develop]
   pull_request:
+    branches: [develop, main]
   workflow_dispatch:
+
 permissions:
   contents: read
+
+concurrency:
+  group: mobile-ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  workflow_lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Validate GitHub workflows
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 .github/workflows/*.yml
+
   pruebas:
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
+      max-parallel: 4
       matrix:
         capa: [Core, Api, Storage, Application]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
           global-json-file: global.json
-      - name: Pruebas portables
-        run: dotnet test "tests/NexoRuta.Mobile.${{ matrix.capa }}.Tests" --configuration Release --logger 'trx;LogFileName=tests.trx' --results-directory resultados
-      - uses: actions/upload-artifact@v4
+          cache: true
+          cache-dependency-path: '**/packages*.lock.json'
+      - name: Restaurar dependencias bloqueadas
+        run: dotnet restore "tests/NexoRuta.Mobile.${{ matrix.capa }}.Tests" --locked-mode
+      - name: Ejecutar pruebas portables
+        run: dotnet test "tests/NexoRuta.Mobile.${{ matrix.capa }}.Tests" --configuration Release --no-restore --logger trx --results-directory resultados
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: pruebas-${{ matrix.capa }}
           path: resultados
+          if-no-files-found: error
+          retention-days: 14
+
   android:
     runs-on: ubuntu-24.04
+    timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
           global-json-file: global.json
-      - uses: actions/setup-java@v4
+          cache: true
+          cache-dependency-path: '**/packages*.lock.json'
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: microsoft
           java-version: '21'
       - name: Instalar workload fijado por el SDK
         run: dotnet workload install maui-android --skip-manifest-update
-      - name: Restaurar Android
-        run: dotnet restore src/NexoRuta.Mobile/NexoRuta.Mobile.csproj -p:TargetFramework=net10.0-android -p:RuntimeIdentifier=android-arm64
+      - name: Preparar R8 requerido por Kotlin
+        id: r8
+        run: echo "jar=$(python3 tools/preparar-r8.py)" >> "$GITHUB_OUTPUT"
+      - name: Restaurar Android con lockfile específico de RID
+        run: dotnet restore src/NexoRuta.Mobile/NexoRuta.Mobile.csproj --locked-mode -p:TargetFramework=net10.0-android -p:RuntimeIdentifier=android-arm64 -p:NuGetLockFilePath=packages.android.lock.json
       - name: Dependencias Android
         run: dotnet build src/NexoRuta.Mobile/NexoRuta.Mobile.csproj -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="$ANDROID_HOME" -p:JavaSdkDirectory="$JAVA_HOME" -p:AcceptAndroidSdkLicenses=true
       - name: Compilar APK Release de verificación
-        run: dotnet build src/NexoRuta.Mobile/NexoRuta.Mobile.csproj --configuration Release --framework net10.0-android -p:RuntimeIdentifier=android-arm64 -p:AndroidPackageFormats=apk --no-restore
+        run: dotnet build src/NexoRuta.Mobile/NexoRuta.Mobile.csproj --configuration Release --framework net10.0-android -p:RuntimeIdentifier=android-arm64 -p:AndroidPackageFormats=apk -p:AndroidR8JarPath="${{ steps.r8.outputs.jar }}" --no-restore
       - name: Checksum del APK
         run: sha256sum src/NexoRuta.Mobile/bin/Release/net10.0-android/android-arm64/*-Signed.apk > SHA256SUMS
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: android-verificacion
           path: |
             src/NexoRuta.Mobile/bin/Release/net10.0-android/android-arm64/*-Signed.apk
             SHA256SUMS
           retention-days: 14
+
+  result:
+    name: Mobile CI / result
+    if: always()
+    needs: [workflow_lint, pruebas, android]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Requerir todas las validaciones mobile
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json, os, sys
+          results = json.loads(os.environ['RESULTS'])
+          failed = {name: job['result'] for name, job in results.items() if job['result'] != 'success'}
+          if failed:
+              print('Validaciones mobile incompletas:', json.dumps(failed, sort_keys=True), file=sys.stderr)
+              raise SystemExit(1)
+          PY

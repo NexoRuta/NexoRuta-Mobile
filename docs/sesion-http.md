@@ -72,4 +72,4 @@ No se probó este cliente contra una API HTTPS real, ni su almacenamiento de ses
 
 ## Validación pendiente
 
-Preparar un origen HTTPS confiable y API/Worker conectados a su base antes de probar credenciales, salida y baja de notificaciones en el S21. La compilación del adaptador y las pruebas HTTP controladas no acreditan ese recorrido nativo. iOS sigue sin compilación ni pruebas Apple; su adaptador push necesita un binding compatible con FID.
+Preparar un origen HTTPS confiable y API/Worker conectados a su base antes de probar credenciales, salida y baja de notificaciones en el S21. La compilación del adaptador y las pruebas HTTP controladas no acreditan ese recorrido nativo. iOS tiene ahora el binding FID y el flujo push implementados en código, pero sigue sin compilación ni pruebas Apple.

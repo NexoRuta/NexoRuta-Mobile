@@ -13,6 +13,8 @@ public sealed class RendicionPage : ContentPage
         foreach (var bulto in bultos)
         {
             var marcar = new CheckBox();
+            SemanticProperties.SetDescription(marcar, $"Bulto {bulto.Codigo}");
+            SemanticProperties.SetHint(marcar, "Marcá para declarar que lo entregás físicamente al depósito.");
             marcar.CheckedChanged += (_, e) => { if (e.Value) seleccionados.Add(bulto.Id); else seleccionados.Remove(bulto.Id); };
             lista.Add(new HorizontalStackLayout { Spacing = 10, Children = { marcar, new Label { Text = bulto.Codigo, VerticalOptions = LayoutOptions.Center, FontSize = 18 } } });
         }

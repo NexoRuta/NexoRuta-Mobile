@@ -14,7 +14,7 @@ El cliente Android registra FID y permisos, recibe avisos genéricos y consulta 
 
 La [preparación del mapa offline](docs/mapa-offline.md) conserva el estado por cuenta/hoja, comprueba estilo y teselas y protege la descarga anterior ante fallos. La confirmación de salida exige mapa preparado. Sin token, se informa la dependencia; la recepción/descarga real y el puente offline iOS siguen pendientes.
 
-La geocodificación usa Geoapify Free detrás de interfaz; Comercio elige y confirma/corrige el destino. Falta clave propia de Geoapify y token público Mapbox para validar proveedores reales y mapa offline. El circuito de correo/cancelación se probó localmente en Mailpit, sin SMTP externo. Cierre de jornada con faltantes registra incidencias inmutables y conserva custodia hasta recepción física en depósito. iOS está preparado parcialmente y mantiene dependencias de binding FID, Firebase/APNs y recursos Apple.
+La geocodificación usa Geoapify Free detrás de interfaz; Comercio elige y confirma/corrige el destino. Falta clave propia de Geoapify y token público Mapbox para validar proveedores reales y mapa offline. El circuito de correo/cancelación se probó localmente en Mailpit, sin SMTP externo. Cierre de jornada con faltantes registra incidencias inmutables y conserva custodia hasta recepción física en depósito. El cliente iOS ya implementa registro FID y recepción/apertura push; falta compilarlo y aceptarlo con Firebase/APNs y recursos Apple.
 
 La [integración parcial de CU-04](docs/reglas-envio.md) fija las reglas al crear cada envío y las descarga por parada; se verificó ingreso, descarga y detalle en una variante separada del S21. Quedan aceptación operativa móvil completa, mapa offline y firma/infraestructura de distribución. No confundir el ensayo FCM con un despliegue de producción ni con la aceptación integral del plan.
 
@@ -22,7 +22,7 @@ La compilación Android Release ARM64 conserva tres advertencias Mapbox sobre p�
 
 La [ubicación de jornada](docs/ubicacion-jornada.md) tiene prueba S21 de inicio, diez puntos con intervalo observado de 30,00–30,33 segundos, recuperación tras interrumpir HTTPS y cierre que detiene el servicio. Falta medición prolongada con pantalla apagada y batería.
 
-Para facilitar el desarrollo, la variante **NexoRuta Validación** omite temporalmente huella/credencial local mediante `OmitirVerificacionLocalParaDesarrollo` en `Seguridad/VerificacionLocal.cs`, con TODO para devolverlo a `false` antes de repetir la aceptación biométrica. Requiere `ValidarAlmacenamiento=true` y el ID de variante; el ID habitual rechaza ese modo y distribución lo desactiva. El ingreso central sigue siendo obligatorio. [Compilación y límites](docs/ci-distribucion.md).
+Para el trabajo diario, la configuración **Debug** omite la verificación local del teléfono (huella o credencial) tanto al reabrir la jornada como al confirmar una rendición. **Release**, incluida CI/distribución, la exige; no hay una variable de entorno de ejecución para desactivarla. El ingreso central y los permisos del sistema siguen siendo obligatorios. La variante diagnóstica **NexoRuta Validación** también puede omitir la verificación para sus ensayos y requiere `ValidarAlmacenamiento=true`, el ID separado `uy.nexoruta.repartidor.validacion` y un directorio de artefactos separado. [Compilación y límites](docs/ci-distribucion.md).
 
 ## Estructura
 
@@ -118,9 +118,11 @@ Este comando requiere un emulador iniciado o dispositivo Android conectado y rec
 
 ## Configuración de servicios
 
-La API se fija al compilar mediante `-p:NexoRutaApiOrigin=https://api.su-dominio/`. Se exige HTTPS confiable; no se desactiva la validación del certificado. Sin ese valor, la app muestra que falta configurar el servicio.
+El backend se selecciona al compilar. Docker local (predeterminado): `-p:NexoRutaBackendTarget=Docker`, origen `https://localhost:5843/` y, en Android, `-p:NexoRutaAndroidDevelopmentCa=/ruta/ca.crt`. VM pública: `-p:NexoRutaBackendTarget=GcpDemo -p:NexoRutaGcpApiOrigin=https://api.<IP-actual>.sslip.io/`, sin CA local. El origen GCP actual se consulta con `tofu -chdir=infra/gcp/demo output -json endpoints` y se toma la propiedad `api`. Ambos destinos exigen HTTPS válido; no se desactiva la validación TLS.
 
 Para Android, usar `-p:NexoRutaFirebaseAndroidConfig=/ruta/externa/google-services.json`, correspondiente a `uy.nexoruta.repartidor`. La compilación falla si se indicó una ruta inexistente. El archivo se mantiene fuera del repositorio; sin configuración, la app informa la dependencia y conserva la operación local.
+
+Para iOS, usar `-p:NexoRutaFirebaseIosConfig=/ruta/externa/GoogleService-Info.plist`, correspondiente al mismo bundle ID. El archivo externo se incorpora como recurso sin copiarlo al repositorio. Los entitlements seleccionan APNs de desarrollo en Debug y producción en Release; la firma requiere un perfil Apple con Push Notifications habilitado. El alta solo activa FCM después de que el repartidor concede permiso.
 
 Mapbox usa `-p:NexoRutaMapboxPublicToken=pk.SU_TOKEN_PUBLICO`. El token público forma parte del cliente; las credenciales administrativas de Firebase y las claves de cifrado pertenecen exclusivamente a backend/Worker. Revisar [push y reasignación](docs/push-reasignacion.md) antes de configurar o demostrar notificaciones remotas.
 

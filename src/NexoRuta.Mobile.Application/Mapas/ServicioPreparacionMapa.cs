@@ -16,7 +16,7 @@ public sealed class ServicioPreparacionMapa(RepositorioJornadasSqlite datos, IPr
         await acceso.WaitAsync(ct);
         try
         {
-            if (!Disponible) return new(false, 0, "El mapa aún no está disponible. Contactá a tu operador antes de salir.");
+            if (!Disponible) return new(false, 0, "Mapa no configurado. La dirección está disponible; podés operar online.");
             var estado = await Recuperar(cuenta, hoja.Id, ct);
             if (estado.Vigente is not { } mapa) return new(false, 0, "Prepará tu recorrido antes de salir del depósito.");
             var zona = ZonaMapa.Para(hoja, proveedor.Proveedor, proveedor.Estilo);

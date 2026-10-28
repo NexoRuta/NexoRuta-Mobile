@@ -84,7 +84,7 @@ public sealed class ProveedorMapbox(ConfiguracionAplicacion configuracion) : IPr
 #endif
     private sealed class MapaPendiente : IMapaDestino
     {
-        public View Vista { get; } = new Label { Text = "El mapa aún no está disponible. La dirección y las paradas se conservan en el teléfono.", Margin = 20, VerticalOptions = LayoutOptions.Center };
+        public View Vista { get; } = new Label { Text = "Mapa no configurado. La dirección está disponible; podés operar online.", Margin = 20, VerticalOptions = LayoutOptions.Center };
         public void Mostrar(ParadaRuta parada) { }
         public void Dispose() { }
     }

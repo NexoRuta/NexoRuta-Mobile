@@ -16,6 +16,8 @@ public sealed class FotoPage : ContentPage
         var capturar = new Button { Text = "Tomar foto", IsEnabled = false };
         var usar = new Button { Text = "Usar esta foto", IsEnabled = false };
         var vista = new Image { HeightRequest = 140, IsVisible = false, Aspect = Aspect.AspectFit };
+        SemanticProperties.SetDescription(camara, "Vista previa de la cámara para tomar una foto de entrega.");
+        SemanticProperties.SetDescription(vista, "Vista previa de la foto de entrega.");
         camara.Loaded += async (_, _) =>
         {
             try

@@ -29,7 +29,7 @@ public sealed class RegistroUbicacionTests : IDisposable
     public async Task NoRegistraAntesDeQueElServidorAutoriceElInicio(string? resultado)
     {
         var jornada = await Crear(resultado);
-        using var registro = new RegistroUbicacion(sesion, datos);
+        using var registro = new RegistroUbicacion(sesion, datos, "https://api.example.test/");
         Assert.False(await registro.TieneActivaAsync());
         Assert.False(await registro.RegistrarAsync(-34.9, -56.2, 10, inicio.AddMinutes(1), default));
         Assert.Single((await datos.LeerAsync(cuenta, jornada.Id))!.Operaciones);
@@ -40,13 +40,13 @@ public sealed class RegistroUbicacionTests : IDisposable
     {
         var jornada = await Crear();
         var fecha = inicio.AddMinutes(1);
-        using (var registro = new RegistroUbicacion(sesion, datos))
+        using (var registro = new RegistroUbicacion(sesion, datos, "https://api.example.test/"))
         {
             Assert.True(await registro.TieneActivaAsync());
             Assert.True(await registro.RegistrarAsync(-34.9, -56.2, 10, fecha, default));
         }
         using var reapertura = new RepositorioJornadasSqlite(raiz, claves);
-        using var reinicio = new RegistroUbicacion(sesion, reapertura);
+        using var reinicio = new RegistroUbicacion(sesion, reapertura, "https://api.example.test/");
         // GPS y red pueden entregar el mismo punto y callbacks desordenados tras reiniciar.
         foreach (var segundos in new[] { 0, -1, 29 })
             Assert.True(await reinicio.RegistrarAsync(-34.9, -56.2, 10, fecha.AddSeconds(segundos), default));
@@ -65,7 +65,7 @@ public sealed class RegistroUbicacionTests : IDisposable
     public async Task PosicionAnteriorAlInicioNoSeReutilizaComoMedicionNueva()
     {
         var jornada = await Crear();
-        using var registro = new RegistroUbicacion(sesion, datos);
+        using var registro = new RegistroUbicacion(sesion, datos, "https://api.example.test/");
         Assert.True(await registro.RegistrarAsync(-34.9, -56.2, 10, inicio.AddSeconds(-1), default));
         Assert.Single((await datos.LeerAsync(cuenta, jornada.Id))!.Operaciones);
         Assert.True(await registro.RegistrarAsync(-34.9, -56.2, 10, inicio, default));
@@ -77,7 +77,7 @@ public sealed class RegistroUbicacionTests : IDisposable
     {
         var jornada = await Crear();
         await datos.ModificarAsync(cuenta, jornada.Id, j => j.Finalizar(inicio.AddMinutes(2)));
-        using var registro = new RegistroUbicacion(sesion, datos);
+        using var registro = new RegistroUbicacion(sesion, datos, "https://api.example.test/");
         Assert.False(await registro.TieneActivaAsync());
         Assert.False(await registro.RegistrarAsync(-34.9, -56.2, 10, inicio.AddMinutes(3), default));
         Assert.False(await registro.RegistrarAsync(double.NaN, -56.2, 10, inicio.AddMinutes(3), default));
@@ -88,7 +88,7 @@ public sealed class RegistroUbicacionTests : IDisposable
     public async Task SinSesionOConOtraCuentaNoRegistraEnLaJornadaAnterior()
     {
         var jornada = await Crear();
-        using var registro = new RegistroUbicacion(sesion, datos);
+        using var registro = new RegistroUbicacion(sesion, datos, "https://api.example.test/");
         sesion.Estado = null;
         Assert.False(await registro.RegistrarAsync(-34.9, -56.2, 10, inicio, default));
         sesion.Estado = new() { Api = "https://api.example.test/", Cuenta = new(Guid.NewGuid(), Guid.NewGuid(), cuenta.OperadorId) };
@@ -101,7 +101,7 @@ public sealed class RegistroUbicacionTests : IDisposable
     public async Task DosCallbacksConcurrentesNoDuplicanElMismoPunto()
     {
         var jornada = await Crear();
-        using var registro = new RegistroUbicacion(sesion, datos);
+        using var registro = new RegistroUbicacion(sesion, datos, "https://api.example.test/");
         await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => registro.RegistrarAsync(-34.9, -56.2, 10, inicio, default)));
         Assert.Single((await datos.LeerAsync(cuenta, jornada.Id))!.Operaciones, x => x.Tipo == TipoOperacionLocal.Posicion);
     }
@@ -110,7 +110,7 @@ public sealed class RegistroUbicacionTests : IDisposable
     public async Task CoordenadasOPrecisionInvalidasNoInventanUnPunto()
     {
         var jornada = await Crear();
-        using var registro = new RegistroUbicacion(sesion, datos);
+        using var registro = new RegistroUbicacion(sesion, datos, "https://api.example.test/");
         Assert.True(await registro.RegistrarAsync(double.NaN, -56.2, 10, inicio, default));
         Assert.True(await registro.RegistrarAsync(-34.9, 181, 10, inicio, default));
         Assert.True(await registro.RegistrarAsync(-34.9, -56.2, 0, inicio, default));
@@ -121,7 +121,7 @@ public sealed class RegistroUbicacionTests : IDisposable
     public async Task DosJornadasAutorizadasNoPermitenAtribuirUnPuntoArbitrariamente()
     {
         var primera = await Crear(); var segunda = await Crear();
-        using var registro = new RegistroUbicacion(sesion, datos);
+        using var registro = new RegistroUbicacion(sesion, datos, "https://api.example.test/");
         Assert.False(await registro.TieneActivaAsync());
         Assert.False(await registro.RegistrarAsync(-34.9, -56.2, 10, inicio, default));
         Assert.Single((await datos.LeerAsync(cuenta, primera.Id))!.Operaciones);
@@ -144,9 +144,9 @@ public sealed class RegistroUbicacionTests : IDisposable
     private sealed class Sesion : IAlmacenSesionMovil
     {
         public EstadoSesionMovil? Estado { get; set; }
-        public Task<EstadoSesionMovil?> LeerAsync() => Task.FromResult(Estado);
+        public Task<EstadoSesionMovil?> LeerAsync(string api) => Task.FromResult(Estado);
         public Task GuardarAsync(EstadoSesionMovil estado) { Estado = estado; return Task.CompletedTask; }
-        public Task EliminarAsync() { Estado = null; return Task.CompletedTask; }
+        public Task EliminarAsync(string api) { Estado = null; return Task.CompletedTask; }
     }
     private sealed class Claves : IAlmacenClavesProtegidas
     {

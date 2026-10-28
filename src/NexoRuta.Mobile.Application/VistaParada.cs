@@ -5,6 +5,18 @@ namespace NexoRuta.Mobile.Application;
 // Solo presentación: nunca sustituye las versiones del sobre de sincronización.
 public sealed record VistaParada(string Estado, bool Activa, long Version)
 {
+    public static bool PuedeIniciar(HojaRuta original, HojaRuta? remota,
+        IEnumerable<ConfirmacionOperacion> confirmaciones) => original.Estado == "Despachada"
+            && remota?.Estado is not ("EnCurso" or "Finalizada")
+            && ContarActivas(original, remota, confirmaciones) > 0;
+
+    public static int ContarActivas(HojaRuta original, HojaRuta? remota,
+        IEnumerable<ConfirmacionOperacion> confirmaciones)
+    {
+        var aplicadas = confirmaciones.ToArray();
+        return original.Paradas.Count(parada => Obtener(parada, remota, aplicadas).Activa);
+    }
+
     public static VistaParada Obtener(ParadaRuta original, HojaRuta? remota,
         IEnumerable<ConfirmacionOperacion> confirmaciones)
     {

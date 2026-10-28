@@ -51,7 +51,7 @@ El push contiene solo versión e identificadores de aviso/operador/acceso. Andro
 
 La referencia visual es Backoffice, adaptada a controles táctiles y pocas acciones por pantalla. La app se bloquea al detenerse y protege la captura de pantalla en Android. Un permiso cancelado no autoriza una rendición.
 
-Android Release ARM64 compila con MAUI 10.0.60, Android mínimo 11. Mapbox mantiene tres advertencias de páginas nativas de 16 KB para Android 16. iOS mínimo 15 sigue sin compilación ni prueba; su adaptador push está bloqueado por el binding FID y por recursos Apple. No hay compatibilidad con contratos anteriores.
+Android Debug ARM64 actual compila con MAUI 10.0.60, Android mínimo 11, y se instaló en S21 con assemblies embebidos. Mapbox mantiene advertencias XA0141 de páginas nativas de 16 KB para Android 16. iOS mínimo 15 ahora tiene adaptador push con binding Installations/FID, configuración externa y entitlements APNs; sigue sin compilación ni prueba por falta de Mac/Xcode y recursos Apple. No hay compatibilidad con contratos anteriores.
 
 ## Registro de jornada
 
@@ -144,4 +144,4 @@ La app consume la publicación capturada al crear cada envío, mediante `ParadaR
 
 La coordinación de ubicación se trasladó al proyecto Application; Android e iOS conservan sus adaptadores nativos e inyectan el mismo servicio. El diario cifrado controla el intervalo tras reinicio, el inicio autorizado y el cierre atómico. [Reglas y evidencia](ubicacion-jornada.md).
 
-Por solicitud del usuario se agregó `OmitirVerificacionLocalParaDesarrollo`, con TODO para ponerlo en `false` antes de la aceptación biométrica. Solo vale con `ValidarAlmacenamiento=true`, compilación restringida al ID `uy.nexoruta.repartidor.validacion`. El ID habitual rechaza ese modo y el script de distribución fuerza `ValidarAlmacenamiento=false`. El atajo omite únicamente la comprobación local: no elimina el ingreso central ni concede permisos de API. Las pruebas realizadas con él no acreditan biometría.
+Actualización 27/10: el bypass local está habilitado por compilación `Debug`; `Release` habitual conserva biometría/credencial. Sigue disponible en Release únicamente para la variante diagnóstica `uy.nexoruta.repartidor.validacion`, cuyo ID el proyecto valida. No hay una variable de entorno de ejecución para producción: distribución y CI usan Release, de modo que pedir la verificación es el comportamiento fijo. El bypass omite únicamente la comprobación local: no elimina el ingreso central ni concede permisos de API. Una prueba bajo Debug no acredita biometría.

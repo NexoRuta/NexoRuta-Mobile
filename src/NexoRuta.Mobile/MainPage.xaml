@@ -1,52 +1,29 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui" xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
- xmlns:vm="clr-namespace:NexoRuta.Mobile.Presentacion" xmlns:r="clr-namespace:NexoRuta.Mobile.Application;assembly=NexoRuta.Mobile.Application"
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+ xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+ xmlns:vm="clr-namespace:NexoRuta.Mobile.Presentacion"
+ xmlns:local="clr-namespace:NexoRuta.Mobile"
+ xmlns:ui="clr-namespace:NexoRuta.Mobile.Controles"
  x:Class="NexoRuta.Mobile.MainPage" x:DataType="vm:PrincipalViewModel" Title="NexoRuta" NavigationPage.HasNavigationBar="False">
+ <ui:OverlayCarga IsBusy="{Binding Ocupado}">
  <Grid RowDefinitions="*,Auto">
   <ScrollView IsVisible="{Binding MostrarIngreso}"><VerticalStackLayout Padding="24,48,24,28" Spacing="26" MaximumWidthRequest="480" HorizontalOptions="Fill">
-   <HorizontalStackLayout Spacing="10"><Image Source="ic_route.png" HeightRequest="30" WidthRequest="30" /><Label Text="NEXORUTA" FontFamily="OpenSansSemibold" FontSize="19" CharacterSpacing="2" TextColor="{StaticResource Primary}" VerticalOptions="Center" /></HorizontalStackLayout>
-   <VerticalStackLayout Spacing="8"><Label Text="Tu jornada,&#10;en un solo lugar." FontSize="34" FontFamily="OpenSansSemibold" LineHeight="1.05" /><Label Text="Ingresá para ver tu hoja de ruta y comenzar el reparto." Style="{StaticResource Caption}" FontSize="16" /></VerticalStackLayout>
+   <HorizontalStackLayout Spacing="10"><Image Source="ic_route.png" HeightRequest="30" WidthRequest="30" AutomationProperties.IsInAccessibleTree="False" /><Label Text="NEXORUTA" FontFamily="OpenSansSemibold" FontSize="19" CharacterSpacing="2" TextColor="{StaticResource Primary}" VerticalOptions="Center" /></HorizontalStackLayout>
+   <VerticalStackLayout Spacing="8"><Label Text="Tu jornada,&#10;en un solo lugar." FontSize="34" FontFamily="OpenSansSemibold" LineHeight="1.05" SemanticProperties.HeadingLevel="Level1" /><Label Text="Ingresá para ver tu hoja de ruta y comenzar el reparto." Style="{StaticResource Caption}" FontSize="16" /></VerticalStackLayout>
    <Border Style="{StaticResource Card}"><VerticalStackLayout Spacing="16">
-    <Label Text="Bienvenido" Style="{StaticResource SectionTitle}" />
-    <Button Text="Continuar mi jornada" Command="{Binding Desbloquear}" IsVisible="{Binding TieneCuenta}" />
+    <Label Text="Bienvenido" Style="{StaticResource SectionTitle}" SemanticProperties.HeadingLevel="Level2" />
+    <Grid IsVisible="{Binding TieneCuenta}"><Button Text="Continuar mi jornada" Command="{Binding Desbloquear}" /></Grid>
     <Label Text="Correo electrónico" FontFamily="OpenSansSemibold" FontSize="13" />
-    <Border Style="{StaticResource InputFrame}"><Entry Text="{Binding Email}" Placeholder="nombre@empresa.com" Keyboard="Email" ReturnType="Next" IsEnabled="{Binding ServicioConfigurado}" AutomationId="CorreoIngreso" /></Border>
+    <Border Style="{StaticResource InputFrame}"><Entry Text="{Binding Email}" Placeholder="nombre@empresa.com" Keyboard="Email" ReturnType="Next" IsEnabled="{Binding ServicioConfigurado}" AutomationId="CorreoIngreso" SemanticProperties.Description="Correo electrónico" /></Border>
     <Label Text="Contraseña" FontFamily="OpenSansSemibold" FontSize="13" />
-    <Border Style="{StaticResource InputFrame}"><Entry Text="{Binding Password}" Placeholder="Tu contraseña" IsPassword="True" ReturnType="Go" ReturnCommand="{Binding Ingresar}" IsEnabled="{Binding ServicioConfigurado}" AutomationId="ClaveIngreso" /></Border>
+    <Border Style="{StaticResource InputFrame}"><Entry Text="{Binding Password}" Placeholder="Tu contraseña" IsPassword="True" ReturnType="Go" ReturnCommand="{Binding Ingresar}" IsEnabled="{Binding ServicioConfigurado}" AutomationId="ClaveIngreso" SemanticProperties.Description="Contraseña" /></Border>
     <Button Text="Ingresar" Command="{Binding Ingresar}" />
-    <ActivityIndicator IsRunning="{Binding Ocupado}" IsVisible="{Binding Ocupado}" />
     <Label Text="{Binding Mensaje}" IsVisible="{Binding Mensaje, Converter={StaticResource TieneTexto}}" FontSize="14" />
    </VerticalStackLayout></Border>
    <Label Text="¿Necesitás ayuda para ingresar? Contactá al administrador de tu operador." Style="{StaticResource Caption}" HorizontalTextAlignment="Center" />
   </VerticalStackLayout></ScrollView>
-  <Grid IsVisible="{Binding Desbloqueada}" RowDefinitions="Auto,*" RowSpacing="12">
-   <Grid Padding="24,24,24,0" ColumnDefinitions="*,Auto"><VerticalStackLayout Spacing="4"><Label Text="NEXORUTA · REPARTIDOR" Style="{StaticResource Eyebrow}" /><Label Text="Mi jornada" Style="{StaticResource PageTitle}" /></VerticalStackLayout><ImageButton Grid.Column="1" Source="ic_account.png" WidthRequest="48" HeightRequest="48" Padding="12" BackgroundColor="Transparent" Clicked="AbrirCuenta" SemanticProperties.Description="Mi cuenta" /></Grid>
-   <RefreshView Grid.Row="1" Command="{Binding Descargar}" IsRefreshing="{Binding Actualizando, Mode=OneWay}">
-    <CollectionView ItemsSource="{Binding Hojas}" SelectionMode="Single" SelectionChanged="AbrirHoja" Margin="24,0">
-     <CollectionView.Header><VerticalStackLayout Spacing="16" Padding="0,0,0,16">
-      <Grid ColumnDefinitions="*,Auto"><DatePicker Date="{Binding Fecha}" DateSelected="CambiarFecha" /><Button Grid.Column="1" Text="Actualizar" Command="{Binding Descargar}" Style="{StaticResource TextButton}" /></Grid>
-      <Border Style="{StaticResource Notice}" IsVisible="{Binding Mensaje, Converter={StaticResource TieneTexto}}"><Label Text="{Binding Mensaje}" FontSize="14" /></Border>
-      <Grid ColumnDefinitions="*,Auto"><Label Text="Tu hoja de ruta" Style="{StaticResource SectionTitle}" /><ActivityIndicator Grid.Column="1" IsRunning="{Binding Actualizando}" IsVisible="{Binding Actualizando}" WidthRequest="24" /></Grid>
-     </VerticalStackLayout></CollectionView.Header>
-     <CollectionView.EmptyView><Border Style="{StaticResource Card}" Margin="0,4,0,24"><VerticalStackLayout Spacing="14" Padding="8,16">
-      <Image Source="ic_route.png" WidthRequest="48" HeightRequest="48" /><Label Text="Todavía no tenés una ruta" Style="{StaticResource SectionTitle}" HorizontalTextAlignment="Center" />
-      <Label Text="Cuando tu operador la despache, aparecerá acá. También podés consultar otra fecha." Style="{StaticResource Caption}" HorizontalTextAlignment="Center" />
-     </VerticalStackLayout></Border></CollectionView.EmptyView>
-     <CollectionView.ItemTemplate><DataTemplate x:DataType="r:VistaHoja">
-      <Border Style="{StaticResource Card}" Margin="0,0,0,16"><VerticalStackLayout Spacing="20">
-       <Grid ColumnDefinitions="*,Auto"><VerticalStackLayout Spacing="5"><Label Text="HOJA DE RUTA" Style="{StaticResource Eyebrow}" /><Label Text="{Binding Fecha, StringFormat='{0:dd MMMM}'}" FontFamily="OpenSansSemibold" FontSize="24" /></VerticalStackLayout><Border Grid.Column="1" Padding="10,6" StrokeThickness="0" BackgroundColor="{Binding Estado, Converter={StaticResource ColorEstado}}" VerticalOptions="Start" StrokeShape="RoundRectangle 10"><Label Text="{Binding EtiquetaEstado}" FontSize="12" FontFamily="OpenSansSemibold" TextColor="{StaticResource Tertiary}" /></Border></Grid>
-       <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12"><Image Source="ic_box.png" WidthRequest="28" HeightRequest="28" /><VerticalStackLayout Grid.Column="1" Spacing="4"><Label Text="{Binding Paradas}" FontFamily="OpenSansSemibold" FontSize="18" /><Label Text="{Binding Bultos}" Style="{StaticResource Caption}" /></VerticalStackLayout><Label Grid.Column="2" Text="{Binding Matricula}" Style="{StaticResource Caption}" VerticalOptions="Center" /></Grid>
-       <BoxView HeightRequest="1" Color="{AppThemeBinding Light={StaticResource Gray200}, Dark=#304158}" />
-       <Grid ColumnDefinitions="*,Auto"><Label Text="Ver mi recorrido" TextColor="{StaticResource Primary}" FontFamily="OpenSansSemibold" /><Image Grid.Column="1" Source="ic_arrow.png" HeightRequest="22" WidthRequest="22" /></Grid>
-      </VerticalStackLayout></Border>
-     </DataTemplate></CollectionView.ItemTemplate>
-    </CollectionView>
-   </RefreshView>
-  </Grid>
-  <Border Grid.Row="1" IsVisible="{Binding Desbloqueada}" StrokeShape="Rectangle" StrokeThickness="0" Padding="12,8,12,12"><Grid ColumnDefinitions="*,*,*">
-   <VerticalStackLayout Spacing="3"><Image Source="ic_route.png" HeightRequest="23" WidthRequest="23" /><Label Text="Jornada" FontSize="11" TextColor="{StaticResource Primary}" FontFamily="OpenSansSemibold" HorizontalTextAlignment="Center" /></VerticalStackLayout>
-   <VerticalStackLayout Grid.Column="1" Spacing="3"><VerticalStackLayout.GestureRecognizers><TapGestureRecognizer Tapped="AbrirAvisos" /></VerticalStackLayout.GestureRecognizers><Image Source="ic_bell.png" HeightRequest="23" WidthRequest="23" /><Label Text="Avisos" Style="{StaticResource Caption}" FontSize="11" HorizontalTextAlignment="Center" /></VerticalStackLayout>
-   <VerticalStackLayout Grid.Column="2" Spacing="3"><VerticalStackLayout.GestureRecognizers><TapGestureRecognizer Tapped="AbrirCuenta" /></VerticalStackLayout.GestureRecognizers><Image Source="ic_account.png" HeightRequest="23" WidthRequest="23" /><Label Text="Cuenta" Style="{StaticResource Caption}" FontSize="11" HorizontalTextAlignment="Center" /></VerticalStackLayout>
-  </Grid></Border>
+  <Grid x:Name="VistasHost" IsVisible="{Binding Desbloqueada}" />
+  <local:BarraNavegacionRepartidor Grid.Row="1" x:Name="BarraNavegacion" IsVisible="{Binding Desbloqueada}" />
  </Grid>
+ </ui:OverlayCarga>
 </ContentPage>

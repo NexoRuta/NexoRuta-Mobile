@@ -4,13 +4,13 @@ using NexoRuta.Mobile.Api.Reparto;
 using NexoRuta.Mobile.Core.Jornadas;
 using NexoRuta.Mobile.Storage;
 namespace NexoRuta.Mobile.Application.Ubicacion;
-public sealed class RegistroUbicacion(IAlmacenSesionMovil sesion, RepositorioJornadasSqlite datos, SincronizadorJornada? sync = null) : IDisposable
+public sealed class RegistroUbicacion(IAlmacenSesionMovil sesion, RepositorioJornadasSqlite datos, string api, SincronizadorJornada? sync = null) : IDisposable
 {
     private readonly SemaphoreSlim exclusividad = new(1, 1);
     public async Task<bool> TieneActivaAsync(CancellationToken ct = default) => await BuscarActiva(ct) is not null;
     private async Task<(CuentaMovil Cuenta, JornadaLocal Jornada)?> BuscarActiva(CancellationToken ct)
     {
-        var estado = await sesion.LeerAsync(); if (estado is null) return null;
+        var estado = await sesion.LeerAsync(api); if (estado is null) return null;
         var activas = new List<JornadaLocal>();
         foreach (var j in await datos.LeerJornadasAsync(estado.Cuenta, ct, soloAbiertas: true))
         {

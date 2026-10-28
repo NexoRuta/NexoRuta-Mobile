@@ -363,7 +363,7 @@ public sealed partial class ClienteSesionMovilTests
         var almacen = ConSesion();
         using var cliente = new ClienteSesionMovil(new Uri("https://otro.example.test/"), almacen,
             new Transporte((_, _) => throw new Xunit.Sdk.XunitException("No debe enviar")), new Reloj());
-        await ErrorAsync(ErrorSesionMovil.EstadoLocalInvalido, () => cliente.ObtenerPermisosAsync());
+        await ErrorAsync(ErrorSesionMovil.ReingresoNecesario, () => cliente.ObtenerPermisosAsync());
         Assert.NotNull(almacen.Estado!.Tokens);
     }
 
@@ -393,6 +393,24 @@ public sealed partial class ClienteSesionMovilTests
         var json = SerializadorSesionMovil.Serializar(ConSesion().Estado!);
         Assert.Throws<SesionMovilException>(() => SerializadorSesionMovil.Deserializar(json.Replace("\"version\":1,", "")));
         Assert.Throws<SesionMovilException>(() => SerializadorSesionMovil.Deserializar("{\"desconocido\":true," + json[1..]));
+    }
+
+    [Fact]
+    public async Task SesionesDeDistintosOrigenesSeMantienenAisladasAlCambiarBackend()
+    {
+        var almacen = ConSesion();
+        var apiGcp = new Uri("https://api.gcp.nexoruta.test/");
+        using var clienteGcp = new ClienteSesionMovil(apiGcp, almacen, new Transporte((request, _) =>
+            Task.FromResult(request.RequestUri!.AbsolutePath.EndsWith("login")
+                ? Json(TokensJson())
+                : Json(ContextoJson(Cuenta)))), new Reloj());
+
+        Assert.Null(await clienteGcp.LeerCuentaGuardadaAsync());
+        Assert.Equal(Cuenta, await clienteGcp.IngresarAsync("repartidor@example.test", "clave"));
+
+        using var clienteDocker = Crear(almacen, (_, _) => throw new InvalidOperationException("No debe llamar a la red."));
+        Assert.Equal(Cuenta, await clienteDocker.LeerCuentaGuardadaAsync());
+        Assert.Equal(Cuenta, await clienteGcp.LeerCuentaGuardadaAsync());
     }
 
     private static ClienteSesionMovil Crear(Almacen almacen, Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> enviar) =>
@@ -437,16 +455,27 @@ public sealed partial class ClienteSesionMovilTests
 
     private sealed class Almacen : IAlmacenSesionMovil
     {
-        public EstadoSesionMovil? Estado { get; set; }
+        private readonly Dictionary<string, EstadoSesionMovil> estados = [];
+        private EstadoSesionMovil? actual;
+        public EstadoSesionMovil? Estado
+        {
+            get => actual;
+            set
+            {
+                actual = value;
+                if (value is not null) estados[value.Api] = value;
+            }
+        }
         public int FallarEnEscritura { get; set; }
         private int escrituras;
         public bool FallarAlEliminar { get; set; }
-        public Task EliminarAsync() { if (FallarAlEliminar) throw new IOException("SecureStorage no disponible"); Estado = null; return Task.CompletedTask; }
-        public Task<EstadoSesionMovil?> LeerAsync() => Task.FromResult(Estado);
+        public Task EliminarAsync(string api) { if (FallarAlEliminar) throw new IOException("SecureStorage no disponible"); estados.Remove(api); if (Estado?.Api == api) actual = null; return Task.CompletedTask; }
+        public Task<EstadoSesionMovil?> LeerAsync(string api) => Task.FromResult(estados.GetValueOrDefault(api));
         public Task GuardarAsync(EstadoSesionMovil estado)
         {
             if (++escrituras == FallarEnEscritura) throw new IOException("Almacén no disponible");
-            Estado = estado;
+            estados[estado.Api] = estado;
+            actual = estado;
             return Task.CompletedTask;
         }
     }
