@@ -51,7 +51,7 @@ El push contiene solo versión e identificadores de aviso/operador/acceso. Andro
 
 La referencia visual es Backoffice, adaptada a controles táctiles y pocas acciones por pantalla. La app se bloquea al detenerse y protege la captura de pantalla en Android. Un permiso cancelado no autoriza una rendición.
 
-Android Release ARM64 compila con MAUI 10.0.60, Android mínimo 11. Mapbox mantiene tres advertencias de páginas nativas de 16 KB para Android 16. iOS mínimo 15 sigue sin compilación ni prueba; su adaptador push está bloqueado por el binding FID y por recursos Apple. No hay compatibilidad con contratos anteriores.
+Android Debug ARM64 actual compila con MAUI 10.0.60, Android mínimo 11, y se instaló en S21 con assemblies embebidos. Mapbox mantiene advertencias XA0141 de páginas nativas de 16 KB para Android 16. iOS mínimo 15 ahora tiene adaptador push con binding Installations/FID, configuración externa y entitlements APNs; sigue sin compilación ni prueba por falta de Mac/Xcode y recursos Apple. No hay compatibilidad con contratos anteriores.
 
 ## Registro de jornada
 

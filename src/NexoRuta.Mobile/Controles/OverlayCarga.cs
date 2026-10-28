@@ -1,9 +1,14 @@
+using Microsoft.Maui.Accessibility;
+using NexoRuta.Mobile.Accesibilidad;
+
 namespace NexoRuta.Mobile.Controles;
 
 public sealed class OverlayCarga : Grid
 {
     private readonly Grid capa;
     private readonly Border tarjeta;
+    private readonly ActivityIndicator indicador;
+    private readonly Image indicadorEstatico;
 
     public static readonly BindableProperty IsBusyProperty = BindableProperty.Create(
         nameof(IsBusy), typeof(bool), typeof(OverlayCarga), false,
@@ -21,18 +26,27 @@ public sealed class OverlayCarga : Grid
             ZIndex = 1000
         };
 
-        var indicador = new ActivityIndicator
+        indicador = new ActivityIndicator
         {
-            IsRunning = true,
             Style = Estilo("LoadingIndicator"),
             WidthRequest = 28,
             HeightRequest = 28,
             HorizontalOptions = LayoutOptions.Center,
             VerticalOptions = LayoutOptions.Center
         };
+        indicadorEstatico = new Image
+        {
+            Source = "ic_refresh.png",
+            WidthRequest = 28,
+            HeightRequest = 28,
+            IsVisible = false,
+            HorizontalOptions = LayoutOptions.Center,
+            VerticalOptions = LayoutOptions.Center
+        };
+        AutomationProperties.SetIsInAccessibleTree(indicadorEstatico, false);
         tarjeta = new Border
         {
-            Content = indicador,
+            Content = new Grid { Children = { indicador, indicadorEstatico } },
             WidthRequest = 68,
             HeightRequest = 68,
             Padding = 18,
@@ -68,6 +82,14 @@ public sealed class OverlayCarga : Grid
     {
         capa.IsVisible = IsBusy;
         if (IsBusy) capa.ZIndex = 1000;
+        var reducir = IsBusy && PreferenciasMovimiento.Reducido;
+        indicador.IsRunning = IsBusy && !reducir;
+        indicador.IsVisible = !reducir;
+        indicadorEstatico.IsVisible = reducir;
+        foreach (var contenido in Children)
+            if (contenido != capa && contenido is BindableObject elemento)
+                AutomationProperties.SetExcludedWithChildren(elemento, IsBusy);
+        if (IsBusy) SemanticScreenReader.Default.Announce("Cargando");
         AplicarDesenfoque(IsBusy);
     }
 

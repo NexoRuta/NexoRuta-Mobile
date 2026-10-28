@@ -22,7 +22,7 @@ public partial class AvisosPage : ContentView
     public ObservableCollection<AvisoResumen> Avisos { get; } = [];
     public bool Disponible { get => disponible; private set { disponible = value; OnPropertyChanged(); OnPropertyChanged(nameof(Cargando)); OnPropertyChanged(nameof(TituloVacio)); } }
     public bool Cargando => !Disponible;
-    public string TituloVacio => "Todo al d?a";
+    public string TituloVacio => "Todo al día";
     public string Mensaje { get => mensaje; private set { mensaje = value; OnPropertyChanged(); } }
     public AvisosPage(CuentaMovil cuenta, ServicioAvisosReparto servicio, IServiceProvider servicios, Func<HojaRuta, Task> abrirHoja)
     {

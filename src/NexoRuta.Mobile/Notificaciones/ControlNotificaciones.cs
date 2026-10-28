@@ -4,7 +4,7 @@ namespace NexoRuta.Mobile.Notificaciones;
 
 public sealed class ControlNotificaciones(IRegistroPush registro, ServicioAvisosReparto? avisos = null, ClienteSesionMovil? cliente = null)
 {
-    private const string ClaveFid = "nexoruta.push.fid.v1";
+    internal const string ClaveFid = "nexoruta.push.fid.v1";
     public bool PuedeActivar => registro.MotivoNoDisponible is null;
     public string Estado { get; private set; } = registro.MotivoNoDisponible ?? "Activá los avisos para recibir cambios urgentes de tu ruta.";
     public async Task ActivarAsync()
@@ -17,7 +17,9 @@ public sealed class ControlNotificaciones(IRegistroPush registro, ServicioAvisos
             await ActualizarRegistroAsync(); return;
         }
         await registro.RegistrarAsync();
+#if ANDROID
         await ActualizarRegistroAsync();
+#endif
         Estado = await SecureStorage.Default.GetAsync(ClaveFid) is null
             ? "Activando las notificaciones…"
             : "Notificaciones activadas.";
@@ -53,10 +55,10 @@ public sealed class ControlNotificaciones(IRegistroPush registro, ServicioAvisos
         global::UserNotifications.UNUserNotificationCenter.Current.RemoveAllDeliveredNotifications();
 #endif
     }
-    public async Task RecibirAsync(IReadOnlyDictionary<string, string> datos, bool abierto)
+    public async Task<bool> RecibirAsync(IReadOnlyDictionary<string, string> datos, bool abierto)
     {
-        if (avisos is null) return;
-        try { await avisos.GuardarReferenciaAsync(datos, abierto); }
-        catch { Estado = "Hay una novedad en tu recorrido. Revisá tus avisos."; }
+        if (avisos is null) return false;
+        try { return await avisos.GuardarReferenciaAsync(datos, abierto); }
+        catch { Estado = "Hay una novedad en tu recorrido. Revisá tus avisos."; return false; }
     }
 }

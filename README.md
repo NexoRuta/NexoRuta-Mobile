@@ -14,7 +14,7 @@ El cliente Android registra FID y permisos, recibe avisos genéricos y consulta 
 
 La [preparación del mapa offline](docs/mapa-offline.md) conserva el estado por cuenta/hoja, comprueba estilo y teselas y protege la descarga anterior ante fallos. La confirmación de salida exige mapa preparado. Sin token, se informa la dependencia; la recepción/descarga real y el puente offline iOS siguen pendientes.
 
-La geocodificación usa Geoapify Free detrás de interfaz; Comercio elige y confirma/corrige el destino. Falta clave propia de Geoapify y token público Mapbox para validar proveedores reales y mapa offline. El circuito de correo/cancelación se probó localmente en Mailpit, sin SMTP externo. Cierre de jornada con faltantes registra incidencias inmutables y conserva custodia hasta recepción física en depósito. iOS está preparado parcialmente y mantiene dependencias de binding FID, Firebase/APNs y recursos Apple.
+La geocodificación usa Geoapify Free detrás de interfaz; Comercio elige y confirma/corrige el destino. Falta clave propia de Geoapify y token público Mapbox para validar proveedores reales y mapa offline. El circuito de correo/cancelación se probó localmente en Mailpit, sin SMTP externo. Cierre de jornada con faltantes registra incidencias inmutables y conserva custodia hasta recepción física en depósito. El cliente iOS ya implementa registro FID y recepción/apertura push; falta compilarlo y aceptarlo con Firebase/APNs y recursos Apple.
 
 La [integración parcial de CU-04](docs/reglas-envio.md) fija las reglas al crear cada envío y las descarga por parada; se verificó ingreso, descarga y detalle en una variante separada del S21. Quedan aceptación operativa móvil completa, mapa offline y firma/infraestructura de distribución. No confundir el ensayo FCM con un despliegue de producción ni con la aceptación integral del plan.
 
@@ -121,6 +121,8 @@ Este comando requiere un emulador iniciado o dispositivo Android conectado y rec
 El backend se selecciona al compilar. Docker local (predeterminado): `-p:NexoRutaBackendTarget=Docker`, origen `https://localhost:5843/` y, en Android, `-p:NexoRutaAndroidDevelopmentCa=/ruta/ca.crt`. VM pública: `-p:NexoRutaBackendTarget=GcpDemo -p:NexoRutaGcpApiOrigin=https://api.<IP-actual>.sslip.io/`, sin CA local. El origen GCP actual se consulta con `tofu -chdir=infra/gcp/demo output -json endpoints` y se toma la propiedad `api`. Ambos destinos exigen HTTPS válido; no se desactiva la validación TLS.
 
 Para Android, usar `-p:NexoRutaFirebaseAndroidConfig=/ruta/externa/google-services.json`, correspondiente a `uy.nexoruta.repartidor`. La compilación falla si se indicó una ruta inexistente. El archivo se mantiene fuera del repositorio; sin configuración, la app informa la dependencia y conserva la operación local.
+
+Para iOS, usar `-p:NexoRutaFirebaseIosConfig=/ruta/externa/GoogleService-Info.plist`, correspondiente al mismo bundle ID. El archivo externo se incorpora como recurso sin copiarlo al repositorio. Los entitlements seleccionan APNs de desarrollo en Debug y producción en Release; la firma requiere un perfil Apple con Push Notifications habilitado. El alta solo activa FCM después de que el repartidor concede permiso.
 
 Mapbox usa `-p:NexoRutaMapboxPublicToken=pk.SU_TOKEN_PUBLICO`. El token público forma parte del cliente; las credenciales administrativas de Firebase y las claves de cifrado pertenecen exclusivamente a backend/Worker. Revisar [push y reasignación](docs/push-reasignacion.md) antes de configurar o demostrar notificaciones remotas.
 

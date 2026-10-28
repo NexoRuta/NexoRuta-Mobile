@@ -42,7 +42,6 @@ public sealed class BarraNavegacionRepartidor : ContentView
                 TextColor = (Color)recursos[seleccionado ? "Primary" : temaOscuro ? "Gray300" : "Gray600"],
                 BackgroundColor = Colors.Transparent,
                 Padding = new Thickness(4, 2),
-                HeightRequest = 56,
                 MinimumHeightRequest = 48,
                 MinimumWidthRequest = 48,
                 AutomationId = $"Navegacion{texto}"

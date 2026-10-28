@@ -10,6 +10,8 @@ public sealed class FirmaPage : ContentPage
         Title = "Firma del receptor";
         vista = new GraphicsView { Drawable = trazado, BackgroundColor = Colors.White, MinimumHeightRequest = 240 };
         var estado = new Label { Text = "Pedí al receptor que firme dentro del recuadro." };
+        SemanticProperties.SetDescription(vista, "Área para capturar la firma del receptor.");
+        SemanticProperties.SetDescription(estado, "Pedí al receptor que firme dentro del recuadro y luego elegí Usar esta firma.");
         vista.StartInteraction += (_, e) =>
         {
             if (trazado.Lineas.Count >= 128) return;

@@ -8,15 +8,15 @@
  <ui:OverlayCarga IsBusy="{Binding Ocupado}">
  <Grid RowDefinitions="*,Auto">
   <ScrollView IsVisible="{Binding MostrarIngreso}"><VerticalStackLayout Padding="24,48,24,28" Spacing="26" MaximumWidthRequest="480" HorizontalOptions="Fill">
-   <HorizontalStackLayout Spacing="10"><Image Source="ic_route.png" HeightRequest="30" WidthRequest="30" /><Label Text="NEXORUTA" FontFamily="OpenSansSemibold" FontSize="19" CharacterSpacing="2" TextColor="{StaticResource Primary}" VerticalOptions="Center" /></HorizontalStackLayout>
-   <VerticalStackLayout Spacing="8"><Label Text="Tu jornada,&#10;en un solo lugar." FontSize="34" FontFamily="OpenSansSemibold" LineHeight="1.05" /><Label Text="Ingresá para ver tu hoja de ruta y comenzar el reparto." Style="{StaticResource Caption}" FontSize="16" /></VerticalStackLayout>
+   <HorizontalStackLayout Spacing="10"><Image Source="ic_route.png" HeightRequest="30" WidthRequest="30" AutomationProperties.IsInAccessibleTree="False" /><Label Text="NEXORUTA" FontFamily="OpenSansSemibold" FontSize="19" CharacterSpacing="2" TextColor="{StaticResource Primary}" VerticalOptions="Center" /></HorizontalStackLayout>
+   <VerticalStackLayout Spacing="8"><Label Text="Tu jornada,&#10;en un solo lugar." FontSize="34" FontFamily="OpenSansSemibold" LineHeight="1.05" SemanticProperties.HeadingLevel="Level1" /><Label Text="Ingresá para ver tu hoja de ruta y comenzar el reparto." Style="{StaticResource Caption}" FontSize="16" /></VerticalStackLayout>
    <Border Style="{StaticResource Card}"><VerticalStackLayout Spacing="16">
-    <Label Text="Bienvenido" Style="{StaticResource SectionTitle}" />
+    <Label Text="Bienvenido" Style="{StaticResource SectionTitle}" SemanticProperties.HeadingLevel="Level2" />
     <Grid IsVisible="{Binding TieneCuenta}"><Button Text="Continuar mi jornada" Command="{Binding Desbloquear}" /></Grid>
     <Label Text="Correo electrónico" FontFamily="OpenSansSemibold" FontSize="13" />
-    <Border Style="{StaticResource InputFrame}"><Entry Text="{Binding Email}" Placeholder="nombre@empresa.com" Keyboard="Email" ReturnType="Next" IsEnabled="{Binding ServicioConfigurado}" AutomationId="CorreoIngreso" /></Border>
+    <Border Style="{StaticResource InputFrame}"><Entry Text="{Binding Email}" Placeholder="nombre@empresa.com" Keyboard="Email" ReturnType="Next" IsEnabled="{Binding ServicioConfigurado}" AutomationId="CorreoIngreso" SemanticProperties.Description="Correo electrónico" /></Border>
     <Label Text="Contraseña" FontFamily="OpenSansSemibold" FontSize="13" />
-    <Border Style="{StaticResource InputFrame}"><Entry Text="{Binding Password}" Placeholder="Tu contraseña" IsPassword="True" ReturnType="Go" ReturnCommand="{Binding Ingresar}" IsEnabled="{Binding ServicioConfigurado}" AutomationId="ClaveIngreso" /></Border>
+    <Border Style="{StaticResource InputFrame}"><Entry Text="{Binding Password}" Placeholder="Tu contraseña" IsPassword="True" ReturnType="Go" ReturnCommand="{Binding Ingresar}" IsEnabled="{Binding ServicioConfigurado}" AutomationId="ClaveIngreso" SemanticProperties.Description="Contraseña" /></Border>
     <Button Text="Ingresar" Command="{Binding Ingresar}" />
     <Label Text="{Binding Mensaje}" IsVisible="{Binding Mensaje, Converter={StaticResource TieneTexto}}" FontSize="14" />
    </VerticalStackLayout></Border>

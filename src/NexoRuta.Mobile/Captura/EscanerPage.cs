@@ -10,6 +10,7 @@ public sealed class EscanerPage : ContentPage
     {
         Title = "Escanear bulto";
         var mensaje = new Label { Text = "Apuntá al QR o código de barras del bulto.", Margin = 16 };
+        SemanticProperties.SetDescription(lector, "Vista de cámara para escanear el código de un bulto.");
         lector.BarcodesDetected += (_, e) => MainThread.BeginInvokeOnMainThread(async () =>
         {
             if (resultado.Task.IsCompleted) return;

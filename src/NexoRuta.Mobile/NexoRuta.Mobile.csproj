@@ -110,9 +110,20 @@
         <PackageReference Include="Xamarin.AndroidX.Tracing.Tracing.Ktx" Version="2.0.0" />
 	</ItemGroup>
 
+    <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">
+        <CodesignEntitlements Condition="'$(Configuration)' == 'Debug'">Platforms/iOS/Entitlements.Debug.plist</CodesignEntitlements>
+        <CodesignEntitlements Condition="'$(Configuration)' == 'Release'">Platforms/iOS/Entitlements.Release.plist</CodesignEntitlements>
+    </PropertyGroup>
     <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">
         <PackageReference Include="AdamE.Firebase.iOS.CloudMessaging" Version="12.10.0" />
+        <PackageReference Include="AdamE.Firebase.iOS.Installations" Version="12.10.0" />
+        <BundleResource Include="$(NexoRutaFirebaseIosConfig)" Link="GoogleService-Info.plist"
+                        Condition="'$(NexoRutaFirebaseIosConfig)' != '' And Exists('$(NexoRutaFirebaseIosConfig)')" />
     </ItemGroup>
+    <Target Name="ValidarConfiguracionFirebaseIos" BeforeTargets="PrepareForBuild"
+        Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios' And '$(NexoRutaFirebaseIosConfig)' != ''">
+        <Error Condition="!Exists('$(NexoRutaFirebaseIosConfig)')" Text="No existe el archivo Firebase indicado en NexoRutaFirebaseIosConfig." />
+    </Target>
     <Target Name="ValidarConfiguracionFirebase" BeforeTargets="PrepareForBuild"
         Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android' And '$(NexoRutaFirebaseAndroidConfig)' != ''">
         <Error Condition="!Exists('$(NexoRutaFirebaseAndroidConfig)')" Text="No existe el archivo Firebase indicado en NexoRutaFirebaseAndroidConfig." />

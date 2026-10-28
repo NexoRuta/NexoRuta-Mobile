@@ -2,6 +2,10 @@ using NexoRuta.Mobile.Presentacion;
 using NexoRuta.Mobile.Application;
 using NexoRuta.Mobile.Notificaciones;
 using NexoRuta.Mobile.Core.Rutas;
+using NexoRuta.Mobile.Accesibilidad;
+#if IOS
+using NexoRuta.Mobile.Platforms.iOS;
+#endif
 
 namespace NexoRuta.Mobile;
 
@@ -32,7 +36,11 @@ public partial class MainPage : ContentPage
             if (e.PropertyName == nameof(PrincipalViewModel.PuedeOperar) && modelo.PuedeOperar)
                 Dispatcher.Dispatch(async () =>
                 {
+                    InicializarVistas();
                     MostrarVista(SeccionPrincipal.Jornada);
+#if IOS
+                    await RecepcionPushIos.ProcesarPendientesAsync();
+#endif
                     await AbrirPendiente();
                     await modelo.ActualizarHojaAsync();
                     try { await control.ActualizarRegistroAsync(); } catch { /* La jornada no depende del transporte push. */ }
@@ -54,8 +62,14 @@ public partial class MainPage : ContentPage
         base.OnAppearing();
         if (!inicializada) { inicializada = true; await modelo.InicializarAsync(); }
         else await modelo.RefrescarLocalesAsync();
-        InicializarVistas();
-        if (modelo.PuedeOperar) MostrarVista(seccionActual);
+        if (modelo.PuedeOperar)
+        {
+            InicializarVistas();
+            MostrarVista(seccionActual);
+        }
+#if IOS
+        if (modelo.PuedeOperar) await RecepcionPushIos.ProcesarPendientesAsync();
+#endif
     }
 
     private void InicializarVistas()
@@ -140,12 +154,19 @@ public partial class MainPage : ContentPage
             VistasHost.Children.Remove(vistaDestino);
             VistasHost.Children.Add(vistaDestino);
             vistaDestino.IsVisible = true;
-            var direccion = destino > anterior ? 1 : -1;
-            var distancia = Math.Max(VistasHost.Width, 280);
-            vistaDestino.TranslationX = direccion * distancia;
-            await Task.WhenAll(
-                vistaDestino.TranslateToAsync(0, 0, 180, Easing.CubicOut),
-                vistaAnterior.TranslateToAsync(-direccion * distancia, 0, 180, Easing.CubicOut));
+            if (PreferenciasMovimiento.Reducido)
+            {
+                vistaDestino.TranslationX = 0;
+            }
+            else
+            {
+                var direccion = destino > anterior ? 1 : -1;
+                var distancia = Math.Max(VistasHost.Width, 280);
+                vistaDestino.TranslationX = direccion * distancia;
+                await Task.WhenAll(
+                    vistaDestino.TranslateToAsync(0, 0, 180, Easing.CubicOut),
+                    vistaAnterior.TranslateToAsync(-direccion * distancia, 0, 180, Easing.CubicOut));
+            }
             vistaAnterior.IsVisible = false;
             vistaAnterior.TranslationX = 0;
             seccionActual = destino;
