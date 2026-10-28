@@ -1,12 +1,16 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui" xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml" xmlns:local="clr-namespace:NexoRuta.Mobile" x:Class="NexoRuta.Mobile.AvisosPage" x:DataType="local:AvisosPage" Title="Avisos">
- <ContentPage.ToolbarItems><ToolbarItem Text="Actualizar" Clicked="Actualizar" IsEnabled="{Binding Disponible}" /></ContentPage.ToolbarItems>
- <Grid Padding="20,12,20,20" RowDefinitions="Auto,*,Auto" RowSpacing="18">
-  <VerticalStackLayout Spacing="8"><Label Text="Novedades de tu ruta" Style="{StaticResource PageTitle}" /><Label Text="{Binding Mensaje}" Style="{StaticResource Caption}" /></VerticalStackLayout>
-  <CollectionView Grid.Row="1" ItemsSource="{Binding Avisos}" SelectionMode="Single" SelectionChanged="Elegir">
-   <CollectionView.EmptyView><Border Style="{StaticResource Card}" Margin="0,8"><VerticalStackLayout Spacing="12" Padding="12,24"><Image Source="ic_bell.png" WidthRequest="42" HeightRequest="42" /><Label Text="Todo al día" Style="{StaticResource SectionTitle}" HorizontalTextAlignment="Center" /><Label Text="Los cambios importantes de tu recorrido aparecerán acá." Style="{StaticResource Caption}" HorizontalTextAlignment="Center" /></VerticalStackLayout></Border></CollectionView.EmptyView>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui" xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml" xmlns:local="clr-namespace:NexoRuta.Mobile" xmlns:ui="clr-namespace:NexoRuta.Mobile.Controles" x:Class="NexoRuta.Mobile.AvisosPage" x:DataType="local:AvisosPage">
+ <ui:OverlayCarga IsBusy="{Binding Cargando}">
+ <Grid RowDefinitions="Auto,*,Auto" RowSpacing="12">
+  <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Padding="20,12,20,0" ColumnSpacing="12">
+   <VerticalStackLayout Spacing="8"><Label Text="Novedades de tu ruta" Style="{StaticResource PageTitle}" /><Label Text="{Binding Mensaje}" Style="{StaticResource Caption}" /></VerticalStackLayout>
+   <Button Grid.Column="1" Text="Actualizar" Clicked="Actualizar" IsEnabled="{Binding Disponible}" Style="{StaticResource TextButton}" VerticalOptions="Start" />
+  </Grid>
+  <CollectionView Grid.Row="1" Margin="20,0" ItemsSource="{Binding Avisos}" SelectionMode="Single" SelectionChanged="Elegir">
+   <CollectionView.EmptyView><Grid HeightRequest="300" Margin="0,8" VerticalOptions="Start"><Border Style="{StaticResource Card}" VerticalOptions="Fill"><VerticalStackLayout Spacing="12" Padding="12,24" VerticalOptions="Center"><Image Source="ic_bell.png" WidthRequest="42" HeightRequest="42" HorizontalOptions="Center" /><Label Text="{Binding TituloVacio}" Style="{StaticResource SectionTitle}" HorizontalTextAlignment="Center" /><Label Text="Los cambios importantes de tu recorrido aparecerán acá." Style="{StaticResource Caption}" HorizontalTextAlignment="Center" /></VerticalStackLayout></Border></Grid></CollectionView.EmptyView>
    <CollectionView.ItemTemplate><DataTemplate x:DataType="local:AvisoResumen"><Border Padding="18" Margin="0,0,0,12"><Grid ColumnDefinitions="28,*,18" ColumnSpacing="12"><Image Source="ic_bell.png" WidthRequest="24" HeightRequest="24" VerticalOptions="Start" /><VerticalStackLayout Grid.Column="1" Spacing="7"><Label Text="{Binding Titulo}" FontSize="17" FontFamily="OpenSansSemibold" /><Label Text="{Binding Motivo}" FontSize="14" /><Label Text="{Binding Fecha}" Style="{StaticResource Caption}" /></VerticalStackLayout><Image Grid.Column="2" Source="ic_arrow.png" WidthRequest="18" HeightRequest="18" /></Grid></Border></DataTemplate></CollectionView.ItemTemplate>
   </CollectionView>
-  <VerticalStackLayout Grid.Row="2" Spacing="12"><Border Style="{StaticResource Notice}" IsVisible="{Binding Text, Source={x:Reference Detalle}, Converter={StaticResource TieneTexto}}"><Label x:Name="Detalle" FontSize="15" /></Border><Button x:Name="VerHoja" Text="Ver mi recorrido" Clicked="AbrirHoja" IsVisible="False" IsEnabled="{Binding Disponible}" /><Button x:Name="Entendido" Text="Entendido" Clicked="Confirmar" IsVisible="False" IsEnabled="{Binding Disponible}" Style="{StaticResource SecondaryButton}" /></VerticalStackLayout>
+  <VerticalStackLayout Grid.Row="2" Padding="20,0" Spacing="12"><Border Style="{StaticResource Notice}" IsVisible="{Binding Text, Source={x:Reference Detalle}, Converter={StaticResource TieneTexto}}"><Label x:Name="Detalle" FontSize="15" /></Border><Button x:Name="VerHoja" Text="Ver mi recorrido" Clicked="AbrirHoja" IsVisible="False" IsEnabled="{Binding Disponible}" /><Button x:Name="Entendido" Text="Entendido" Clicked="Confirmar" IsVisible="False" IsEnabled="{Binding Disponible}" Style="{StaticResource SecondaryButton}" /></VerticalStackLayout>
  </Grid>
-</ContentPage>
+ </ui:OverlayCarga>
+</ContentView>

@@ -34,6 +34,17 @@
 		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
 		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">30.0</SupportedOSPlatformVersion>
 	</PropertyGroup>
+	<PropertyGroup>
+		<NexoRutaBackendTarget Condition="'$(NexoRutaBackendTarget)' == ''">Docker</NexoRutaBackendTarget>
+		<NexoRutaResolvedApiOrigin Condition="'$(NexoRutaBackendTarget)' == 'Docker'">https://localhost:5843/</NexoRutaResolvedApiOrigin>
+		<NexoRutaResolvedApiOrigin Condition="'$(NexoRutaBackendTarget)' == 'GcpDemo'">$(NexoRutaGcpApiOrigin)</NexoRutaResolvedApiOrigin>
+	</PropertyGroup>
+	<Target Name="ValidarBackendMobile" BeforeTargets="PrepareForBuild">
+		<Error Condition="'$(NexoRutaBackendTarget)' != 'Docker' And '$(NexoRutaBackendTarget)' != 'GcpDemo'" Text="NexoRutaBackendTarget debe ser Docker o GcpDemo." />
+		<Error Condition="'$(NexoRutaBackendTarget)' == 'GcpDemo' And '$(NexoRutaGcpApiOrigin)' == ''" Text="GcpDemo requiere NexoRutaGcpApiOrigin con el origen HTTPS actual de la VM." />
+		<Error Condition="'$(NexoRutaBackendTarget)' == 'GcpDemo' And '$(NexoRutaAndroidDevelopmentCa)' != ''" Text="GcpDemo usa certificados públicos del sistema; no debe incluir la CA de Docker." />
+		<Error Condition="'$(NexoRutaBackendTarget)' == 'Docker' And '$(NexoRutaAndroidDevelopmentCa)' != '' And $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) != 'android'" Text="La CA de desarrollo local solo se admite para Android." />
+	</Target>
 	<PropertyGroup Condition="'$(ValidarAlmacenamiento)' == 'true'">
 		<DefineConstants>$(DefineConstants);VALIDAR_ALMACENAMIENTO</DefineConstants>
 	</PropertyGroup>
@@ -46,10 +57,10 @@
 		<MauiAsset Include="Resources/Images/dotnet_bot.png" LogicalName="prueba-almacenamiento.png" />
 	</ItemGroup>
 
-    <PropertyGroup Condition="'$(NexoRutaAndroidDevelopmentCa)' != '' And $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+    <PropertyGroup Condition="'$(NexoRutaBackendTarget)' == 'Docker' And '$(NexoRutaAndroidDevelopmentCa)' != '' And $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
         <DefineConstants>$(DefineConstants);NEXORUTA_LOCAL_HTTPS</DefineConstants>
     </PropertyGroup>
-    <ItemGroup Condition="'$(NexoRutaAndroidDevelopmentCa)' != '' And $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+    <ItemGroup Condition="'$(NexoRutaBackendTarget)' == 'Docker' And '$(NexoRutaAndroidDevelopmentCa)' != '' And $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
         <AndroidResource Include="$(NexoRutaAndroidDevelopmentCa)" Link="Resources/raw/nexoruta_development_ca.crt" />
         <AndroidResource Include="ConfiguracionLocal/network_security_config.xml" Link="Resources/xml/nexoruta_local_network_security.xml" />
     </ItemGroup>
@@ -57,7 +68,8 @@
         <Error Condition="!Exists('$(NexoRutaAndroidDevelopmentCa)')" Text="No existe el certificado público de la CA local indicado." />
     </Target>
     <ItemGroup>
-        <AssemblyMetadata Include="NexoRutaApiOrigin" Value="$(NexoRutaApiOrigin)" />
+        <AssemblyMetadata Include="NexoRutaBackendTarget" Value="$(NexoRutaBackendTarget)" />
+        <AssemblyMetadata Include="NexoRutaApiOrigin" Value="$(NexoRutaResolvedApiOrigin)" />
         <AssemblyMetadata Include="NexoRutaMapboxPublicToken" Value="$(NexoRutaMapboxPublicToken)" />
     </ItemGroup>
 	<ItemGroup>

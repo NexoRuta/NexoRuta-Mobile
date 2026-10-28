@@ -4,6 +4,7 @@ import datetime
 import json
 import os
 from pathlib import Path
+import re
 import secrets
 import ssl
 import urllib.error
@@ -15,9 +16,13 @@ os.umask(0o077)
 local = Path(__file__).resolve().parents[3] / '.local/mobile'
 config = json.loads((local / 'bootstrap.json').read_text())['AccesoInicial']
 tls = ssl.create_default_context(cafile=str(local / 'tls/ca.crt'))
-state_file = local / 'demo.json'
+suffix = os.environ.get('NEXORUTA_DEMO_SUFFIX', '').strip().lower()
+if suffix and not re.fullmatch(r'[a-z0-9-]{1,12}', suffix):
+    raise SystemExit('NEXORUTA_DEMO_SUFFIX admite hasta 12 letras, números o guiones.')
+state_file = local / (f'demo-{suffix}.json' if suffix else 'demo.json')
 if not state_file.exists():
-    state_file.write_text(json.dumps({'email': 'repartidor@mobile.nexoruta.test', 'password': secrets.token_urlsafe(24)}, indent=2))
+    email = f'repartidor-{suffix}@mobile.nexoruta.test' if suffix else 'repartidor@mobile.nexoruta.test'
+    state_file.write_text(json.dumps({'email': email, 'password': secrets.token_urlsafe(24)}, indent=2))
 state = json.loads(state_file.read_text())
 
 def save():
@@ -54,22 +59,27 @@ if user is None:
 state['accesoId'] = user['accesoId']
 profiles = api('/api/repartidores', token=operator)
 if not any(p['accesoId'] == user['accesoId'] for p in profiles):
-    api(f'/api/repartidores/{user["accesoId"]}', 'PUT', {'nombre': 'Repartidor local S21', 'activo': True}, operator)
+    api(f'/api/repartidores/{user["accesoId"]}', 'PUT', {'nombre': f'Repartidor local S21 {suffix}'.strip(), 'activo': True}, operator)
 policy = api('/api/reparto/configuracion', token=operator, statuses=(200, 404))
 if policy is None:
     api('/api/reparto/configuracion', 'PUT', {'version': 0, 'zonaHoraria': 'America/Montevideo', 'maximoParadas': 30,
         'bloquearDiscrepanciasCarga': True}, operator)
 vehicles = api('/api/reparto/vehiculos', token=operator)
-vehicle = next((v for v in vehicles if v['matricula'] == 'LOCAL-S21'), None)
+matricula = f'LOCAL-S21-{suffix.upper()}' if suffix else 'LOCAL-S21'
+vehicle = next((v for v in vehicles if v['matricula'] == matricula), None)
 if vehicle is None:
-    vehicle = api('/api/reparto/vehiculos', 'PUT', {'matricula': 'LOCAL-S21', 'pesoMaximoGramos': 100000,
+    vehicle = api('/api/reparto/vehiculos', 'PUT', {'matricula': matricula, 'pesoMaximoGramos': 100000,
         'volumenMaximoCm3': 1000000, 'activo': True}, operator)
 zone = ZoneInfo('America/Montevideo')
 today = datetime.datetime.now(zone).date()
+if os.environ.get('NEXORUTA_DEMO_DATE'):
+    today = datetime.date.fromisoformat(os.environ['NEXORUTA_DEMO_DATE'])
+    if today < datetime.datetime.now(zone).date():
+        raise SystemExit('NEXORUTA_DEMO_DATE no puede ser anterior al día local.')
 routes = api(f'/api/rutas?fecha={today}', token=operator)
 route = next((r for r in routes if r['repartidorAccesoId'] == user['accesoId']), None)
 if route is None:
-    code = f'LOCAL-S21-{today}'
+    code = f'LOCAL-S21-{today}' + (f'-{suffix.upper()}' if suffix else '')
     shipments = api('/api/envios', token=merchant)
     shipment = next((e for e in shipments if any(b['codigo'] == code for b in e['bultos'])), None)
     if shipment is None:
@@ -94,4 +104,4 @@ session = api('/api/auth/mobile/login', 'POST', {'email': state['email'], 'passw
 assert api('/api/mobile/perfil', token=session['accessToken'])['accesoId'] == user['accesoId']
 own = api(f'/api/mobile/rutas?fecha={today}', token=session['accessToken'])
 assert any(r['id'] == route['id'] for r in own)
-print('Hoja ficticia preparada y acceso móvil verificado. Credenciales únicamente en .local/mobile/demo.json.')
+print(f'Hoja ficticia preparada y acceso móvil verificado. Credenciales únicamente en {state_file.relative_to(local.parent.parent)}.')

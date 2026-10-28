@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+ xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+ xmlns:vm="clr-namespace:NexoRuta.Mobile.Presentacion"
+ xmlns:r="clr-namespace:NexoRuta.Mobile.Application;assembly=NexoRuta.Mobile.Application"
+ xmlns:ui="clr-namespace:NexoRuta.Mobile.Controles"
+ x:Class="NexoRuta.Mobile.JornadaView" x:DataType="vm:PrincipalViewModel">
+ <ui:OverlayCarga IsBusy="{Binding Actualizando}">
+ <Grid RowDefinitions="Auto,*" RowSpacing="12">
+  <VerticalStackLayout Padding="24,24,24,0" Spacing="4"><Label Text="NEXORUTA · REPARTIDOR" Style="{StaticResource Eyebrow}" /><Label Text="Mi jornada" Style="{StaticResource PageTitle}" /></VerticalStackLayout>
+  <RefreshView Grid.Row="1" Command="{Binding Descargar}" IsRefreshing="{Binding Actualizando, Mode=OneWay}">
+   <CollectionView ItemsSource="{Binding Hojas}" SelectionMode="Single" SelectionChanged="AbrirHoja" Margin="24,0">
+    <CollectionView.Header><VerticalStackLayout Spacing="16" Padding="0,0,0,16">
+     <Grid ColumnDefinitions="*,Auto"><DatePicker Date="{Binding Fecha}" DateSelected="CambiarFecha" /><Button Grid.Column="1" Text="Actualizar" Command="{Binding Descargar}" Style="{StaticResource TextButton}" /></Grid>
+     <Grid HeightRequest="56"><Label Text="Tu hoja de ruta" Style="{StaticResource SectionTitle}" VerticalOptions="Center" IsVisible="{Binding MostrarTituloHoja}" /><Border Style="{StaticResource Notice}" IsVisible="{Binding MostrarMensajeHoja}" Padding="12,6" VerticalOptions="Fill"><Label Text="{Binding Mensaje}" FontSize="13" MaxLines="2" LineBreakMode="TailTruncation" VerticalOptions="Center" /></Border></Grid>
+    </VerticalStackLayout></CollectionView.Header>
+    <CollectionView.EmptyView><Border Style="{StaticResource Card}" Margin="0,4,0,24"><VerticalStackLayout Spacing="14" Padding="8,16">
+     <Image Source="ic_route.png" WidthRequest="48" HeightRequest="48" /><Label Text="Todavía no tenés una ruta" Style="{StaticResource SectionTitle}" HorizontalTextAlignment="Center" />
+     <Label Text="Cuando tu operador la despache, aparecerá acá. También podés consultar otra fecha." Style="{StaticResource Caption}" HorizontalTextAlignment="Center" />
+    </VerticalStackLayout></Border></CollectionView.EmptyView>
+    <CollectionView.ItemTemplate><DataTemplate x:DataType="r:VistaHoja">
+     <Border Style="{StaticResource Card}" Margin="0,0,0,16"><VerticalStackLayout Spacing="20">
+      <Grid ColumnDefinitions="*,Auto"><VerticalStackLayout Spacing="5"><Label Text="HOJA DE RUTA" Style="{StaticResource Eyebrow}" /><Label Text="{Binding Fecha, StringFormat='{0:dd MMMM}'}" FontFamily="OpenSansSemibold" FontSize="24" /></VerticalStackLayout><Border Grid.Column="1" Padding="10,6" StrokeThickness="0" BackgroundColor="{Binding Estado, Converter={StaticResource ColorEstado}}" VerticalOptions="Start" StrokeShape="RoundRectangle 10"><Label Text="{Binding EtiquetaEstado}" FontSize="12" FontFamily="OpenSansSemibold" TextColor="{StaticResource Tertiary}" /></Border></Grid>
+      <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12"><Image Source="ic_box.png" WidthRequest="28" HeightRequest="28" /><VerticalStackLayout Grid.Column="1" Spacing="4"><Label Text="{Binding Paradas}" FontFamily="OpenSansSemibold" FontSize="18" /><Label Text="{Binding Bultos}" Style="{StaticResource Caption}" /></VerticalStackLayout><Label Grid.Column="2" Text="{Binding Matricula}" Style="{StaticResource Caption}" VerticalOptions="Center" /></Grid>
+      <BoxView HeightRequest="1" Color="{AppThemeBinding Light={StaticResource Gray200}, Dark=#304158}" />
+      <Grid ColumnDefinitions="*,Auto"><Label Text="Ver mi recorrido" TextColor="{StaticResource Primary}" FontFamily="OpenSansSemibold" /><Image Grid.Column="1" Source="ic_arrow.png" HeightRequest="22" WidthRequest="22" /></Grid>
+     </VerticalStackLayout></Border>
+    </DataTemplate></CollectionView.ItemTemplate>
+   </CollectionView>
+  </RefreshView>
+ </Grid>
+ </ui:OverlayCarga>
+</ContentView>

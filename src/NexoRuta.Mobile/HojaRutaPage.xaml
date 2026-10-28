@@ -1,13 +1,11 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui" xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml" xmlns:vm="clr-namespace:NexoRuta.Mobile.Presentacion" x:Class="NexoRuta.Mobile.HojaRutaPage" x:DataType="vm:HojaRutaViewModel" Title="Mi recorrido">
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui" xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml" xmlns:vm="clr-namespace:NexoRuta.Mobile.Presentacion" xmlns:ui="clr-namespace:NexoRuta.Mobile.Controles" x:Class="NexoRuta.Mobile.HojaRutaPage" x:DataType="vm:HojaRutaViewModel" Title="Mi recorrido">
  <ContentPage.ToolbarItems><ToolbarItem Text="Actualizar" Command="{Binding Sincronizar}" /><ToolbarItem Text="Terminar jornada" Command="{Binding Finalizar}" Order="Secondary" /></ContentPage.ToolbarItems>
+ <ui:OverlayCarga IsBusy="{Binding Ocupado}">
  <CollectionView ItemsSource="{Binding Paradas}" SelectionMode="Single" SelectionChanged="AbrirParada" Margin="20,0">
   <CollectionView.Header><VerticalStackLayout Spacing="16" Padding="0,12,0,20">
    <Grid ColumnDefinitions="*,Auto"><VerticalStackLayout Spacing="4"><Label Text="{Binding Hoja.Fecha, StringFormat='{0:dddd d MMMM}'}" Style="{StaticResource Caption}" /><Label Text="Hoja de ruta" Style="{StaticResource PageTitle}" /></VerticalStackLayout><Border Grid.Column="1" Padding="12,8" VerticalOptions="Center"><Label Text="{Binding Hoja.Matricula}" FontFamily="OpenSansSemibold" FontSize="13" /></Border></Grid>
-   <Border Style="{StaticResource Card}"><VerticalStackLayout Spacing="14"><Label Text="{Binding Etapa}" Style="{StaticResource Eyebrow}" /><Label Text="{Binding Resumen}" FontFamily="OpenSansSemibold" FontSize="21" /><ProgressBar Progress="{Binding Progreso}" /><Label Text="{Binding Indicacion}" Style="{StaticResource Caption}" /></VerticalStackLayout></Border>
-   <Border Style="{StaticResource Notice}" IsVisible="{Binding Mensaje, Converter={StaticResource TieneTexto}}"><Label Text="{Binding Mensaje}" FontSize="14" /></Border>
-   <Border Style="{StaticResource Notice}" IsVisible="{Binding IncidenciasCierre, Converter={StaticResource TieneTexto}}"><Label Text="{Binding IncidenciasCierre}" FontSize="14" /></Border>
-   <ActivityIndicator IsRunning="{Binding Ocupado}" IsVisible="{Binding Ocupado}" />
+   <Border Style="{StaticResource Card}"><Grid><VerticalStackLayout Spacing="14" Padding="0,0,32,0"><Label Text="{Binding Etapa}" Style="{StaticResource Eyebrow}" /><Label Text="{Binding Resumen}" FontFamily="OpenSansSemibold" FontSize="21" /><ProgressBar Progress="{Binding Progreso}" /><Label Text="{Binding EstadoInformativo}" Style="{StaticResource Caption}" HeightRequest="56" MaxLines="2" LineBreakMode="TailTruncation" /></VerticalStackLayout></Grid></Border>
    <Button Text="Iniciar jornada" Command="{Binding Iniciar}" IsVisible="{Binding MostrarInicio}" />
    <VerticalStackLayout IsVisible="{Binding MostrarCarga}" Spacing="12">
     <Label Text="{Binding ResumenCarga}" Style="{StaticResource SectionTitle}" /><Button Text="Escanear bulto" Command="{Binding Escanear}" ImageSource="ic_box.png" Style="{StaticResource SecondaryButton}" />
@@ -25,4 +23,5 @@
   </Grid></Border></DataTemplate></CollectionView.ItemTemplate>
   <CollectionView.Footer><BoxView HeightRequest="20" Color="Transparent" /></CollectionView.Footer>
  </CollectionView>
+ </ui:OverlayCarga>
 </ContentPage>

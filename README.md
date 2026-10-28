@@ -22,7 +22,7 @@ La compilación Android Release ARM64 conserva tres advertencias Mapbox sobre p�
 
 La [ubicación de jornada](docs/ubicacion-jornada.md) tiene prueba S21 de inicio, diez puntos con intervalo observado de 30,00–30,33 segundos, recuperación tras interrumpir HTTPS y cierre que detiene el servicio. Falta medición prolongada con pantalla apagada y batería.
 
-Para facilitar el desarrollo, la variante **NexoRuta Validación** omite temporalmente huella/credencial local mediante `OmitirVerificacionLocalParaDesarrollo` en `Seguridad/VerificacionLocal.cs`, con TODO para devolverlo a `false` antes de repetir la aceptación biométrica. Requiere `ValidarAlmacenamiento=true` y el ID de variante; el ID habitual rechaza ese modo y distribución lo desactiva. El ingreso central sigue siendo obligatorio. [Compilación y límites](docs/ci-distribucion.md).
+Para el trabajo diario, la configuración **Debug** omite la verificación local del teléfono (huella o credencial) tanto al reabrir la jornada como al confirmar una rendición. **Release**, incluida CI/distribución, la exige; no hay una variable de entorno de ejecución para desactivarla. El ingreso central y los permisos del sistema siguen siendo obligatorios. La variante diagnóstica **NexoRuta Validación** también puede omitir la verificación para sus ensayos y requiere `ValidarAlmacenamiento=true`, el ID separado `uy.nexoruta.repartidor.validacion` y un directorio de artefactos separado. [Compilación y límites](docs/ci-distribucion.md).
 
 ## Estructura
 
@@ -118,7 +118,7 @@ Este comando requiere un emulador iniciado o dispositivo Android conectado y rec
 
 ## Configuración de servicios
 
-La API se fija al compilar mediante `-p:NexoRutaApiOrigin=https://api.su-dominio/`. Se exige HTTPS confiable; no se desactiva la validación del certificado. Sin ese valor, la app muestra que falta configurar el servicio.
+El backend se selecciona al compilar. Docker local (predeterminado): `-p:NexoRutaBackendTarget=Docker`, origen `https://localhost:5843/` y, en Android, `-p:NexoRutaAndroidDevelopmentCa=/ruta/ca.crt`. VM pública: `-p:NexoRutaBackendTarget=GcpDemo -p:NexoRutaGcpApiOrigin=https://api.<IP-actual>.sslip.io/`, sin CA local. El origen GCP actual se consulta con `tofu -chdir=infra/gcp/demo output -json endpoints` y se toma la propiedad `api`. Ambos destinos exigen HTTPS válido; no se desactiva la validación TLS.
 
 Para Android, usar `-p:NexoRutaFirebaseAndroidConfig=/ruta/externa/google-services.json`, correspondiente a `uy.nexoruta.repartidor`. La compilación falla si se indicó una ruta inexistente. El archivo se mantiene fuera del repositorio; sin configuración, la app informa la dependencia y conserva la operación local.
 

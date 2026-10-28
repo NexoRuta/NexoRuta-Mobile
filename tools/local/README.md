@@ -28,7 +28,7 @@ python3 mobile/tools/local/verificar.py
 python3 mobile/tools/local/demo.py
 ```
 
-La segunda orden prepara una hoja ficticia con cuenta de repartidor separada del administrador. Sus credenciales quedan únicamente en `.local/mobile/demo.json`. No crea operaciones de entrega ni inicia la jornada en nombre del repartidor. Repetirla conserva la cuenta y la hoja existente del día.
+La segunda orden prepara una hoja ficticia con cuenta de repartidor separada del administrador. Sus credenciales quedan únicamente en `.local/mobile/demo.json`. No crea operaciones de entrega ni inicia la jornada en nombre del repartidor. Repetirla conserva la cuenta y la hoja existente del día. Para una fecha futura de prueba (por ejemplo, para no reutilizar una jornada ya finalizada), se puede ejecutar `NEXORUTA_DEMO_DATE=2026-10-28 python3 mobile/tools/local/demo.py` desde WSL. La fecha no puede ser anterior al día local. Para crear una cuenta y vehículo ficticios adicionales en la misma fecha, usar `NEXORUTA_DEMO_SUFFIX=aceptacion`; cada sufijo conserva sus credenciales en `demo-<sufijo>.json` e identifica un bulto diferente. La hoja futura no se puede iniciar hasta esa fecha.
 
 Para el Worker de push, con ADC ya autorizado y una instalación registrada desde la app:
 
@@ -56,14 +56,18 @@ Con el entorno Android cargado y el S21 ya autorizado en `adb devices`:
 
 ```bash
 adb reverse tcp:5843 tcp:5843
+R8_JAR="$(python3 mobile/tools/preparar-r8.py)"
 dotnet build mobile/src/NexoRuta.Mobile/NexoRuta.Mobile.csproj -c Release -f net10.0-android \
   -p:RuntimeIdentifier=android-arm64 -p:AndroidPackageFormats=apk \
-  -p:NexoRutaApiOrigin=https://localhost:5843/ \
+  -p:AndroidR8JarPath="$R8_JAR" \
+  -p:NexoRutaBackendTarget=Docker \
   -p:NexoRutaAndroidDevelopmentCa="$PWD/.local/mobile/tls/ca.crt" \
   -p:NexoRutaFirebaseAndroidConfig="$PWD/mobile/google-services.json"
 ```
 
-El APK local confía en esa CA únicamente para `localhost`. Otros dominios conservan los certificados del sistema y no se habilita HTTP. Nunca incorpora la clave privada de la CA, ni omite la validación TLS. Sin `NexoRutaAndroidDevelopmentCa` el recurso de desarrollo no se agrega. La compilación de distribución usa `tools/apk-distribucion.sh`, sin esta propiedad.
+El APK local apunta al backend Docker (`https://localhost:5843/`) y confía en esa CA únicamente para `localhost`. Otros dominios conservan los certificados del sistema y no se habilita HTTP. Nunca incorpora la clave privada de la CA, ni omite la validación TLS. El SDK Android incluido trae R8 8.11, que no entiende metadata Kotlin 2.4 presente en dependencias Android actuales; `tools/preparar-r8.py` descarga R8 9.1.31 desde Maven de Google y verifica SHA-256 antes de usarlo. Para probar el backend público de la demo GCP, compilá con `-p:NexoRutaBackendTarget=GcpDemo -p:NexoRutaGcpApiOrigin=https://api.<IP-actual>.sslip.io/` y omití la CA local. La dirección actual se obtiene de `tofu -chdir=infra/gcp/demo output -json endpoints` (propiedad `api`). La compilación de distribución ya selecciona `GcpDemo`.
+
+Al compilar un APK `Debug` para instalar manualmente con `adb install`, agregá `-p:EmbedAssembliesIntoApk=true`. Sin esta propiedad, Android puede intentar Fast Deployment y cerrar la app cuando el APK se instala fuera del despliegue del IDE. Las compilaciones `Release` de distribución empaquetan los assemblies normalmente.
 
 Se utiliza una sola aplicación: **NexoRuta Repartidor**, identificador `uy.nexoruta.repartidor`. Actualizar esa instalación con `adb install -r`; no instalar variantes con otro identificador. Las antiguas instalaciones de validación y prototipo se retiraron del S21 conservando sus datos. Las pruebas futuras deben usar la aplicación habitual y cuentas ficticias, sin borrar trabajo pendiente.
 

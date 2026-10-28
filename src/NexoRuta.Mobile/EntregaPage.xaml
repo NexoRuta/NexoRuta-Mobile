@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui" xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml" xmlns:vm="clr-namespace:NexoRuta.Mobile.Presentacion" x:Class="NexoRuta.Mobile.EntregaPage" x:DataType="vm:EntregaViewModel" Title="Detalle de parada">
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui" xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml" xmlns:vm="clr-namespace:NexoRuta.Mobile.Presentacion" xmlns:ui="clr-namespace:NexoRuta.Mobile.Controles" x:Class="NexoRuta.Mobile.EntregaPage" x:DataType="vm:EntregaViewModel" Title="Detalle de parada">
+ <ui:OverlayCarga IsBusy="{Binding Ocupado}">
  <ScrollView><VerticalStackLayout Padding="20,12,20,28" Spacing="18">
-  <Border Style="{StaticResource Card}"><VerticalStackLayout Spacing="14">
+  <Border Style="{StaticResource Card}"><Grid><VerticalStackLayout Spacing="14" Padding="0,0,32,0">
    <Grid ColumnDefinitions="*,Auto"><Label Text="{Binding NumeroParada}" Style="{StaticResource Eyebrow}" /><Border Grid.Column="1" Padding="10,5" StrokeThickness="0" BackgroundColor="{StaticResource Secondary}" StrokeShape="RoundRectangle 8"><Label Text="{Binding EstadoActual}" TextColor="{StaticResource Tertiary}" FontSize="12" FontFamily="OpenSansSemibold" /></Border></Grid>
    <Label Text="{Binding Parada.Destinatario}" FontSize="25" FontFamily="OpenSansSemibold" />
    <Grid ColumnDefinitions="22,*" ColumnSpacing="10"><Image Source="ic_pin.png" HeightRequest="22" WidthRequest="22" VerticalOptions="Start" /><Label Grid.Column="1" Text="{Binding Parada.Direccion}" FontSize="16" LineHeight="1.2" /></Grid>
    <Label Text="{Binding Bultos}" Style="{StaticResource Caption}" />
    <Button Text="Ver destino" Clicked="AbrirMapa" Style="{StaticResource SecondaryButton}" />
-  </VerticalStackLayout></Border>
+  </VerticalStackLayout></Grid></Border>
   <Border Style="{StaticResource Notice}" IsVisible="{Binding Mensaje, Converter={StaticResource TieneTexto}}"><Label Text="{Binding Mensaje}" FontSize="14" /></Border>
-  <ActivityIndicator IsVisible="{Binding Ocupado}" IsRunning="{Binding Ocupado}" />
   <Border Style="{StaticResource Notice}" IsVisible="{Binding MostrarResultado}"><Label Text="{Binding Indicacion}" /></Border>
   <VerticalStackLayout IsVisible="{Binding PuedeRegistrar}" Spacing="18">
    <VerticalStackLayout Spacing="6"><Label Text="Registrar entrega" Style="{StaticResource SectionTitle}" /><Label Text="Completá los datos del receptor y las pruebas solicitadas por tu operador." Style="{StaticResource Caption}" /></VerticalStackLayout>
@@ -24,4 +24,5 @@
    <Border Style="{StaticResource Card}" IsVisible="{Binding MostrarIntento}"><VerticalStackLayout Spacing="14"><Label Text="¿No pudiste entregar?" Style="{StaticResource SectionTitle}" /><Label Text="Elegí el motivo para dejar registrado el intento." Style="{StaticResource Caption}" /><Border Style="{StaticResource InputFrame}"><Picker Title="Seleccionar motivo" ItemsSource="{Binding Motivos}" ItemDisplayBinding="{Binding Descripcion}" SelectedItem="{Binding Motivo}" /></Border><Button Text="Registrar intento" Command="{Binding Intento}" Style="{StaticResource SecondaryButton}" /></VerticalStackLayout></Border>
   </VerticalStackLayout>
  </VerticalStackLayout></ScrollView>
+ </ui:OverlayCarga>
 </ContentPage>

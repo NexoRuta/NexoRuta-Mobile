@@ -37,7 +37,9 @@ public static class MauiProgram
         builder.Services.AddSingleton<MainPage>();
         builder.Services.AddSingleton<Captura.IInteraccionReparto, Captura.InteraccionReparto>();
         builder.Services.AddSingleton<Ubicacion.ITrackingJornada, Ubicacion.TrackingJornada>();
-        builder.Services.AddSingleton<NexoRuta.Mobile.Application.Ubicacion.RegistroUbicacion>();
+        builder.Services.AddSingleton(s => new NexoRuta.Mobile.Application.Ubicacion.RegistroUbicacion(
+            s.GetRequiredService<IAlmacenSesionMovil>(), s.GetRequiredService<RepositorioJornadasSqlite>(),
+            configuracion.Api!.AbsoluteUri, s.GetService<NexoRuta.Mobile.Application.SincronizadorJornada>()));
         builder.Services.AddSingleton<NexoRuta.Mobile.Application.EvidenciasLocales>();
         builder.Services.AddSingleton<Mapas.ProveedorMapbox>();
         builder.Services.AddSingleton<Mapas.IProveedorMapas>(s => s.GetRequiredService<Mapas.ProveedorMapbox>());

@@ -16,7 +16,7 @@ public sealed class MapaDestinoPage : ContentPage
     {
         this.mapa = mapa; this.preparacion = preparacion; this.cuenta = cuenta; this.hoja = hoja; Title = "Destino";
         var progreso = new ProgressBar { IsVisible = false };
-        var descargar = new Button { Text = "Preparar recorrido", IsEnabled = preparacion.Disponible };
+        var descargar = new Button { Text = "Preparar recorrido", IsEnabled = preparacion.Disponible, IsVisible = preparacion.Disponible };
         var cancelar = new Button { Text = "Cancelar descarga", IsVisible = false };
         CancellationTokenSource? intento = null;
         cancelar.Clicked += (_, _) => { cancelar.IsEnabled = false; estado.Text = "Cancelando descarga…"; intento?.Cancel(); };

@@ -8,39 +8,53 @@ using NexoRuta.Mobile.Storage;
 namespace NexoRuta.Mobile;
 
 public sealed record AvisoResumen(Guid Id, string Titulo, string Motivo, string Fecha);
-public partial class AvisosPage : ContentPage
+public partial class AvisosPage : ContentView
 {
     private readonly CuentaMovil cuenta;
     private readonly ServicioAvisosReparto servicio;
     private readonly IServiceProvider servicios;
-    private Guid? apertura;
+    private readonly Func<HojaRuta, Task> abrirHoja;
     private AvisoReparto? seleccionado;
     private HojaRuta? remota;
     private bool disponible = true;
+    private DateTimeOffset? ultimaConsulta;
     private string mensaje = "Los avisos te ayudan a continuar con el recorrido correcto.";
     public ObservableCollection<AvisoResumen> Avisos { get; } = [];
-    public bool Disponible { get => disponible; private set { disponible = value; OnPropertyChanged(); } }
+    public bool Disponible { get => disponible; private set { disponible = value; OnPropertyChanged(); OnPropertyChanged(nameof(Cargando)); OnPropertyChanged(nameof(TituloVacio)); } }
+    public bool Cargando => !Disponible;
+    public string TituloVacio => "Todo al d?a";
     public string Mensaje { get => mensaje; private set { mensaje = value; OnPropertyChanged(); } }
-    public AvisosPage(CuentaMovil cuenta, ServicioAvisosReparto servicio, IServiceProvider servicios, Guid? apertura = null)
+    public AvisosPage(CuentaMovil cuenta, ServicioAvisosReparto servicio, IServiceProvider servicios, Func<HojaRuta, Task> abrirHoja)
     {
         InitializeComponent(); this.cuenta = cuenta; this.servicio = servicio; this.servicios = servicios;
-        this.apertura = apertura; BindingContext = this;
+        this.abrirHoja = abrirHoja; BindingContext = this;
     }
-    protected override async void OnAppearing()
+    public async Task ActivarAsync(Guid? apertura = null)
     {
-        base.OnAppearing();
         await Ejecutar(async () =>
         {
-            await Listar();
-            if (apertura is { } id) { apertura = null; await Mostrar(id); }
+            if (apertura is not null || ultimaConsulta is null || DateTimeOffset.UtcNow - ultimaConsulta > TimeSpan.FromSeconds(30))
+                await Listar();
+            if (apertura is { } id) await Mostrar(id);
         });
     }
     private async Task Listar()
     {
         var lista = await servicio.ListarAsync(cuenta);
-        Avisos.Clear();
-        foreach (var a in lista) Avisos.Add(new(a.Id, a.Tipo == "Cancelacion" ? "Entrega cancelada" : "Entrega postergada",
-            a.Motivo, a.CreadoEnUtc.ToLocalTime().ToString("dd/MM HH:mm")));
+        var nuevos = lista.Select(a => new AvisoResumen(a.Id, a.Tipo == "Cancelacion" ? "Entrega cancelada" : "Entrega postergada",
+            a.Motivo, a.CreadoEnUtc.ToLocalTime().ToString("dd/MM HH:mm"))).ToArray();
+        for (var destino = 0; destino < nuevos.Length; destino++)
+        {
+            if (destino < Avisos.Count && Avisos[destino] == nuevos[destino]) continue;
+            var existente = -1;
+            for (var i = destino + 1; i < Avisos.Count; i++)
+                if (Avisos[i].Id == nuevos[destino].Id) { existente = i; break; }
+            if (existente >= 0) Avisos.Move(existente, destino);
+            else if (destino < Avisos.Count) Avisos[destino] = nuevos[destino];
+            else Avisos.Add(nuevos[destino]);
+        }
+        while (Avisos.Count > nuevos.Length) Avisos.RemoveAt(Avisos.Count - 1);
+        ultimaConsulta = DateTimeOffset.UtcNow;
     }
     private async Task Mostrar(Guid id)
     {
@@ -54,7 +68,7 @@ public partial class AvisosPage : ContentPage
         VerHoja.IsVisible = remota is not null && seleccionado.Vigente;
         Entendido.IsVisible = seleccionado.ConfirmadoEnUtc is null;
     }
-    private async void Actualizar(object? sender, EventArgs e) => await Ejecutar(Listar);
+    private async void Actualizar(object? sender, EventArgs e) => await Ejecutar(async () => { await Listar(); });
     private async void Elegir(object? sender, SelectionChangedEventArgs e)
     {
         if (sender is CollectionView lista) lista.SelectedItem = null;
@@ -72,7 +86,7 @@ public partial class AvisosPage : ContentPage
         if (remota is null) return;
         var datos = servicios.GetRequiredService<RepositorioJornadasSqlite>();
         var local = (await datos.LeerHojasAsync(cuenta)).Select(b => SerializadorHojaRuta.Deserializar(b, cuenta)).SingleOrDefault(h => h.Id == remota.Id);
-        await Navigation.PushAsync(new HojaRutaPage(local ?? remota, cuenta, servicios));
+        await abrirHoja(local ?? remota);
     });
     private async Task Ejecutar(Func<Task> accion)
     {

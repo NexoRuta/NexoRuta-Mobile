@@ -5,7 +5,6 @@ using System.Text.Json;
 using NexoRuta.Mobile.Api.Identidad;
 using NexoRuta.Mobile.Api.Reparto;
 using NexoRuta.Mobile.Application;
-using NexoRuta.Mobile.Application.Mapas;
 using NexoRuta.Mobile.Captura;
 using NexoRuta.Mobile.Core.Identidad;
 using NexoRuta.Mobile.Core.Jornadas;
@@ -24,8 +23,7 @@ public sealed class HojaRutaViewModel : INotifyPropertyChanged
     private HojaRuta? vistaRemota;
     private readonly IInteraccionReparto interaccion;
     private readonly IVerificacionLocal verificacion;
-    private readonly ServicioPreparacionMapa mapas;
-    public string EstadoMapa { get; private set; } = "Mapa pendiente de comprobar.";
+    public string EstadoMapa { get; private set; } = "Mapa offline pospuesto; operación online.";
     private readonly Dictionary<Guid, ConfirmacionOperacion> confirmaciones = [];
     private bool ocupado;
     private string mensaje = "";
@@ -38,11 +36,13 @@ public sealed class HojaRutaViewModel : INotifyPropertyChanged
     public string Etapa => Cerrada ? "JORNADA FINALIZADA" : !Iniciada ? "ANTES DE SALIR" : !Salida ? "CARGA EN DEPÓSITO" : "EN REPARTO";
     public string Indicacion => Cerrada ? "Tu recorrido terminó. Gracias por el trabajo de hoy." : !Iniciada ? "Revisá tus paradas e iniciá la jornada en el depósito." : !Salida ? "Escaneá los bultos asignados antes de comenzar el reparto." : "Elegí tu próxima parada para registrar la entrega.";
     public string CantidadParadas => $"{Hoja.Paradas.Length} en tu recorrido";
+    public string EstadoInformativo => !string.IsNullOrWhiteSpace(IncidenciasCierre) ? IncidenciasCierre
+        : !string.IsNullOrWhiteSpace(Mensaje) ? Mensaje : Indicacion;
     public string ResumenCarga => $"{Carga.Count(b => b.Cargado)} de {Carga.Count} bultos verificados";
     public double Progreso => Hoja.Paradas.Length == 0 ? 0 : (double)Entregadas / Hoja.Paradas.Length;
     public event PropertyChangedEventHandler? PropertyChanged;
     public bool Ocupado { get => ocupado; private set { ocupado = value; Actualizar(); } }
-    public string Mensaje { get => mensaje; private set { mensaje = value; Cambiar(); } }
+    public string Mensaje { get => mensaje; private set { mensaje = value; Cambiar(); Cambiar(nameof(EstadoInformativo)); } }
     public bool Iniciada => Jornada is { } j && confirmaciones.TryGetValue(j.Operaciones[0].Id, out var inicio) && inicio.Resultado == "Aplicada";
     public bool Cerrada => Jornada?.EstaCerrada ?? false;
     public bool Salida => Registrada(TipoOperacionLocal.ConfirmarCarga);
@@ -63,11 +63,11 @@ public sealed class HojaRutaViewModel : INotifyPropertyChanged
     public ComandoAsincrono Finalizar { get; }
 
     public HojaRutaViewModel(HojaRuta hoja, CuentaMovil cuenta, RepositorioJornadasSqlite datos,
-        ITrackingJornada seguimiento, IInteraccionReparto interaccion, IVerificacionLocal verificacion, ServicioPreparacionMapa mapas,
+        ITrackingJornada seguimiento, IInteraccionReparto interaccion, IVerificacionLocal verificacion,
         ClienteSesionMovil? cliente = null, SincronizadorJornada? sincronizador = null, ServicioAvisosReparto? avisos = null)
     {
         Hoja = hoja; Cuenta = cuenta; this.datos = datos; this.seguimiento = seguimiento;
-        this.avisos = avisos; this.interaccion = interaccion; this.verificacion = verificacion; this.mapas = mapas; this.cliente = cliente; this.sincronizador = sincronizador;
+        this.avisos = avisos; this.interaccion = interaccion; this.verificacion = verificacion; this.cliente = cliente; this.sincronizador = sincronizador;
         Iniciar = new(() => Ejecutar(async () =>
         {
             if (Jornada is null)
@@ -104,12 +104,10 @@ public sealed class HojaRutaViewModel : INotifyPropertyChanged
             var asignados = Hoja.Paradas.Where(ParadaActiva).SelectMany(p => p.Bultos).Select(b => b.Id).ToArray();
             if (Hoja.Politica.BloquearDiscrepanciasCarga && asignados.Any(id => !Cargados().Contains(id)))
                 throw new InvalidOperationException("Faltan bultos por escanear. Resolvé las diferencias con el depósito antes de salir.");
-            var preparacion = await mapas.ConsultarAsync(Cuenta, Hoja);
-            if (!preparacion.Preparada) throw new InvalidOperationException("Prepará el recorrido antes de salir. " + preparacion.Mensaje);
             Jornada = await datos.ModificarAsync(Cuenta, Jornada!.Id, j => j.ConfirmarCarga(DateTimeOffset.UtcNow));
             await IntentarSincronizar(); Mensaje = "Carga confirmada. ¡Buen reparto!";
         }), () => !Ocupado && MostrarCarga);
-        Sincronizar = new(() => Ejecutar(async () => { await IntentarSincronizar(); Mensaje = Resumen; }), () => !Ocupado && Jornada is not null && sincronizador is not null);
+        Sincronizar = new(() => Ejecutar(async () => { await IntentarSincronizar(); Mensaje = "Recorrido actualizado."; }), () => !Ocupado && Jornada is not null && sincronizador is not null);
         Rendir = new(() => Ejecutar(async () =>
         {
             var seleccionados = await interaccion.SeleccionarRendicionAsync(BultosParaRendir()); if (seleccionados is null) return;
@@ -132,13 +130,16 @@ public sealed class HojaRutaViewModel : INotifyPropertyChanged
     }
     public async Task InicializarAsync() => await Ejecutar(async () =>
     {
+        // Hidratar desde SQLite primero permite abrir la ruta con contenido completo sin
+        // esperar a la red ni a una consulta de mapa que no es necesaria para operar online.
         await Refrescar();
+        if (Iniciada && !Cerrada) _ = await seguimiento.IniciarAsync();
+    });
+
+    public async Task ActualizarDesdeServidorAsync() => await Ejecutar(async () =>
+    {
         await ConsultarCambios();
         await Refrescar();
-        try { var mapa = await mapas.ConsultarAsync(Cuenta, Hoja); EstadoMapa = mapa.Preparada ? "Listo para tu jornada" : "Preparación pendiente"; }
-        catch { EstadoMapa = "Revisá el mapa antes de salir"; }
-        Cambiar(nameof(EstadoMapa));
-        if (Iniciada && !Cerrada) _ = await seguimiento.IniciarAsync();
     });
     public async Task Refrescar()
     {
@@ -151,12 +152,27 @@ public sealed class HojaRutaViewModel : INotifyPropertyChanged
                 var confirmada = JsonSerializer.Deserialize(bytes, ContratosRepartoJson.Default.ConfirmacionOperacion)!;
                 confirmaciones[confirmada.Id] = confirmada;
             }
-        Paradas.Clear();
-        foreach (var p in Hoja.Paradas.OrderBy(x => x.Orden))
-            Paradas.Add(new(p.EnvioId, p.Orden, p.Destinatario, p.Direccion, EstadoPresentado(p), TextoReparto.Bultos(p.Bultos.Length)));
-        var cargados = Cargados(); Carga.Clear();
-        foreach (var bulto in Hoja.Paradas.Where(ParadaActiva).SelectMany(p => p.Bultos)) Carga.Add(new(bulto.Codigo, cargados.Contains(bulto.Id)));
+        Reconciliar(Paradas, Hoja.Paradas.OrderBy(x => x.Orden)
+            .Select(p => new ParadaResumen(p.EnvioId, p.Orden, p.Destinatario, p.Direccion, EstadoPresentado(p), TextoReparto.Bultos(p.Bultos.Length))).ToArray());
+        var cargados = Cargados();
+        Reconciliar(Carga, Hoja.Paradas.Where(ParadaActiva).SelectMany(p => p.Bultos)
+            .Select(bulto => new BultoCargaResumen(bulto.Codigo, cargados.Contains(bulto.Id))).ToArray());
         Actualizar();
+    }
+
+    private static void Reconciliar<T>(ObservableCollection<T> actual, IReadOnlyList<T> deseado) where T : notnull
+    {
+        for (var destino = 0; destino < deseado.Count; destino++)
+        {
+            if (destino < actual.Count && EqualityComparer<T>.Default.Equals(actual[destino], deseado[destino])) continue;
+            var existente = -1;
+            for (var i = destino + 1; i < actual.Count; i++)
+                if (EqualityComparer<T>.Default.Equals(actual[i], deseado[destino])) { existente = i; break; }
+            if (existente >= 0) actual.Move(existente, destino);
+            else if (destino < actual.Count) actual[destino] = deseado[destino];
+            else actual.Add(deseado[destino]);
+        }
+        while (actual.Count > deseado.Count) actual.RemoveAt(actual.Count - 1);
     }
     public string EstadoPresentado(ParadaRuta parada) =>
         EntregaFisica(parada.EnvioId) && Estado(parada) is not ("Entregado" or "EntregaPendienteValidacion" or "EntregaSinValidacion")
@@ -169,7 +185,7 @@ public sealed class HojaRutaViewModel : INotifyPropertyChanged
     private async Task ConsultarCambios()
     {
         if (avisos is null || Connectivity.Current.NetworkAccess != NetworkAccess.Internet) return;
-        using var limite = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+        using var limite = new CancellationTokenSource(TimeSpan.FromSeconds(2));
         try { await avisos.ActualizarRutaAsync(Cuenta, Hoja.Id, limite.Token); }
         catch (Exception ex) when (ex is HttpRequestException or SesionMovilException or OperationCanceledException)
         { /* La hoja y los comandos originales siguen disponibles sin red. */ }

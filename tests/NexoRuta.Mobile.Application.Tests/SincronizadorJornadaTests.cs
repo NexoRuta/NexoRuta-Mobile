@@ -226,8 +226,8 @@ public sealed class SincronizadorJornadaTests
     }
     private sealed class Almacen(EstadoSesionMovil? estado) : IAlmacenSesionMovil
     {
-        public Task EliminarAsync() { estado = null; return Task.CompletedTask; }
-        public Task<EstadoSesionMovil?> LeerAsync() => Task.FromResult<EstadoSesionMovil?>(estado);
+        public Task EliminarAsync(string api) { estado = null; return Task.CompletedTask; }
+        public Task<EstadoSesionMovil?> LeerAsync(string api) => Task.FromResult<EstadoSesionMovil?>(estado);
         public Task GuardarAsync(EstadoSesionMovil nuevo) { estado = nuevo; return Task.CompletedTask; }
     }
     private sealed class Transporte(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> responder) : HttpMessageHandler

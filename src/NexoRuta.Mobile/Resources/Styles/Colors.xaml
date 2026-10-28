@@ -19,6 +19,8 @@
  <Color x:Key="Gray900">#17243A</Color>
  <Color x:Key="Gray950">#0D1626</Color>
  <Color x:Key="SurfaceDark">#1B2940</Color>
+ <Color x:Key="LoadingScrimLight">#55F4F6FA</Color>
+ <Color x:Key="LoadingScrimDark">#55111B2C</Color>
  <Color x:Key="Success">#16734B</Color>
  <Color x:Key="SuccessSoft">#E7F5ED</Color>
  <Color x:Key="Warning">#865711</Color>

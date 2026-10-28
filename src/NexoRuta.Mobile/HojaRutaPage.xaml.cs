@@ -8,17 +8,25 @@ public partial class HojaRutaPage : ContentPage
     private readonly HojaRutaViewModel modelo;
     private readonly IServiceProvider servicios;
     private readonly SincronizacionConectividad? sincronizacion;
+    private bool preparada;
     public HojaRutaPage(HojaRuta hoja, CuentaMovil cuenta, IServiceProvider servicios)
     {
         InitializeComponent(); this.servicios = servicios;
         modelo = ActivatorUtilities.CreateInstance<HojaRutaViewModel>(servicios, hoja, cuenta); BindingContext = modelo;
         sincronizacion = servicios.GetService<SincronizacionConectividad>();
     }
+    public async Task PrepararAsync()
+    {
+        if (preparada) return;
+        preparada = true;
+        await modelo.InicializarAsync();
+        await modelo.ActualizarDesdeServidorAsync();
+    }
     protected override async void OnAppearing()
     {
         base.OnAppearing();
         if (sincronizacion is not null) sincronizacion.Finalizada += Actualizar;
-        await modelo.InicializarAsync();
+        await PrepararAsync();
     }
     protected override void OnDisappearing()
     { if (sincronizacion is not null) sincronizacion.Finalizada -= Actualizar; base.OnDisappearing(); }

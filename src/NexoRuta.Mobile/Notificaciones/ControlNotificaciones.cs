@@ -5,7 +5,8 @@ namespace NexoRuta.Mobile.Notificaciones;
 public sealed class ControlNotificaciones(IRegistroPush registro, ServicioAvisosReparto? avisos = null, ClienteSesionMovil? cliente = null)
 {
     private const string ClaveFid = "nexoruta.push.fid.v1";
-    public string Estado { get; private set; } = "Activá los avisos para recibir cambios urgentes de tu ruta.";
+    public bool PuedeActivar => registro.MotivoNoDisponible is null;
+    public string Estado { get; private set; } = registro.MotivoNoDisponible ?? "Activá los avisos para recibir cambios urgentes de tu ruta.";
     public async Task ActivarAsync()
     {
         if (cliente is null) { Estado = "Primero debe configurarse el servicio de NexoRuta."; return; }

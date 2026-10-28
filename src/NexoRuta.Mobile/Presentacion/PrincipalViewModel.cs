@@ -30,9 +30,11 @@ public sealed class PrincipalViewModel : INotifyPropertyChanged
     public bool Desbloqueada { get => desbloqueada; private set { desbloqueada = value; Cambiar(); Actualizar(); } }
     public bool MostrarIngreso => !Desbloqueada;
     public bool PuedeOperar => Desbloqueada && !Ocupado;
+    public bool MostrarTituloHoja => string.IsNullOrWhiteSpace(Mensaje);
+    public bool MostrarMensajeHoja => !MostrarTituloHoja;
     public bool TieneCuenta => cuenta is not null;
     public bool ServicioConfigurado => cliente is not null;
-    public string Mensaje { get => mensaje; private set { mensaje = value; Cambiar(); } }
+    public string Mensaje { get => mensaje; private set { mensaje = value; Cambiar(); Cambiar(nameof(MostrarTituloHoja)); Cambiar(nameof(MostrarMensajeHoja)); } }
     public string Email { get => email; set { email = value; Cambiar(); } }
     public string Password { get => password; set { password = value; Cambiar(); } }
     public DateTime Fecha { get => fecha; set { fecha = value; Cambiar(); } }
@@ -43,6 +45,7 @@ public sealed class PrincipalViewModel : INotifyPropertyChanged
     public ComandoAsincrono Reingresar { get; }
     public ComandoAsincrono CerrarSesion { get; }
     public string EstadoAvisos => notificaciones.Estado;
+    public bool PuedeActivarAvisos => notificaciones.PuedeActivar;
 
     public PrincipalViewModel(ConfiguracionAplicacion config, IAlmacenSesionMovil almacen,
         RepositorioJornadasSqlite datos, IVerificacionLocal verificacion, Notificaciones.ControlNotificaciones notificaciones,
@@ -137,9 +140,23 @@ public sealed class PrincipalViewModel : INotifyPropertyChanged
             vistas.Add(VistaHoja.Crear(original, actual is null ? null : SerializadorHojaRuta.Deserializar(actual, esperada)));
         }
         if (!Desbloqueada || cuenta != esperada || Fecha != fechaEsperada) return;
-        Hojas.Clear();
-        foreach (var vista in vistas) Hojas.Add(vista);
+        for (var destino = 0; destino < vistas.Count; destino++)
+        {
+            var siguiente = vistas[destino];
+            if (destino < Hojas.Count && MismoContenidoVisible(Hojas[destino], siguiente)) continue;
+            var existente = -1;
+            for (var i = destino + 1; i < Hojas.Count; i++)
+                if (Hojas[i].Original.Id == siguiente.Original.Id) { existente = i; break; }
+            if (existente >= 0) Hojas.Move(existente, destino);
+            else if (destino < Hojas.Count) Hojas[destino] = siguiente;
+            else Hojas.Add(siguiente);
+        }
+        while (Hojas.Count > vistas.Count) Hojas.RemoveAt(Hojas.Count - 1);
     }
+    private static bool MismoContenidoVisible(VistaHoja actual, VistaHoja siguiente) =>
+        actual.Original.Id == siguiente.Original.Id && actual.Estado == siguiente.Estado &&
+        actual.Fecha == siguiente.Fecha && actual.Matricula == siguiente.Matricula &&
+        actual.Paradas == siguiente.Paradas && actual.Bultos == siguiente.Bultos;
     private async Task Ejecutar(Func<Task> accion)
     {
         Ocupado = true;
