@@ -41,7 +41,7 @@ jobs:
         run: dotnet restore "tests/NexoRuta.Mobile.${{ matrix.capa }}.Tests" --locked-mode
       - name: Ejecutar pruebas portables
         run: dotnet test "tests/NexoRuta.Mobile.${{ matrix.capa }}.Tests" --configuration Release --no-restore --logger trx --results-directory resultados
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: pruebas-${{ matrix.capa }}
@@ -76,7 +76,7 @@ jobs:
         run: dotnet build src/NexoRuta.Mobile/NexoRuta.Mobile.csproj --configuration Release --framework net10.0-android -p:RuntimeIdentifier=android-arm64 -p:AndroidPackageFormats=apk -p:AndroidR8JarPath="${{ steps.r8.outputs.jar }}" --no-restore
       - name: Checksum del APK
         run: sha256sum src/NexoRuta.Mobile/bin/Release/net10.0-android/android-arm64/*-Signed.apk > SHA256SUMS
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: android-verificacion
           path: |
