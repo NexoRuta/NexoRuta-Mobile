@@ -77,6 +77,12 @@ El puerto de conexión está en la pantalla principal de depuración inalámbric
 
 [Arranque HTTPS, correo de prueba y S21 por Wi-Fi](tools/local/README.md). [CI y comandos de firma](docs/ci-distribucion.md).
 
+## APK de desarrollo
+
+Las versiones de desarrollo para Android ARM64 se publican como [pre-releases descargables](https://github.com/NexoRuta/NexoRuta-Mobile/releases) al integrar cambios de la app en `main`. Cada release incluye el APK y su checksum SHA-256. Usa una clave de desarrollo dedicada y estable para poder actualizar entre estas versiones; no es la clave de distribución.
+
+El APK conserva la configuración local predeterminada (`https://localhost:5843/`) y no incluye Firebase ni Mapbox. Sirve para instalar y probar la app en un entorno local configurado; no es una build lista para producción. Al cambiar más adelante a la clave de distribución habrá que instalar esa versión como una app nueva.
+
 ## Compilar y comprobar
 
 Desde la raíz de este repositorio:
