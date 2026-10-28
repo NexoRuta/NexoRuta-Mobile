@@ -30,6 +30,7 @@ jobs:
     timeout-minutes: 25
     env:
       NEXORUTA_GCP_API_ORIGIN: ${{ vars.NEXORUTA_GCP_API_ORIGIN }}
+      NEXORUTA_MAPBOX_PUBLIC_TOKEN: ${{ vars.NEXORUTA_MAPBOX_PUBLIC_TOKEN }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -63,7 +64,39 @@ jobs:
                   or parsed.username or parsed.password or parsed.query or parsed.fragment):
               raise SystemExit('Set the repository variable NEXORUTA_GCP_API_ORIGIN to the public HTTPS API origin, including its trailing slash.')
           print(f'Using GCP API origin: {origin}')
+
+          mapbox_token = os.environ.get('NEXORUTA_MAPBOX_PUBLIC_TOKEN', '')
+          if not mapbox_token.startswith('pk.'):
+              raise SystemExit('Configure the repository variable NEXORUTA_MAPBOX_PUBLIC_TOKEN with a public Mapbox token starting with pk.')
+          print('Mapbox public token: configured')
           PY
+
+      - name: Prepare Firebase Android configuration
+        env:
+          FIREBASE_ANDROID_CONFIG_BASE64: ${{ secrets.MOBILE_FIREBASE_ANDROID_CONFIG_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$FIREBASE_ANDROID_CONFIG_BASE64" ]]; then
+            echo '::error::Configure the MOBILE_FIREBASE_ANDROID_CONFIG_BASE64 repository secret.'
+            exit 1
+          fi
+          umask 077
+          config_path="$RUNNER_TEMP/google-services.json"
+          printf '%s' "$FIREBASE_ANDROID_CONFIG_BASE64" | base64 --decode > "$config_path"
+          python3 - "$config_path" <<'PY'
+          import json
+          import sys
+
+          with open(sys.argv[1], encoding='utf-8') as config_file:
+              config = json.load(config_file)
+          packages = {
+              client.get('client_info', {}).get('android_client_info', {}).get('package_name')
+              for client in config.get('client', [])
+          }
+          if 'uy.nexoruta.repartidor' not in packages:
+              raise SystemExit('Firebase configuration must include the Android app uy.nexoruta.repartidor.')
+          PY
+          echo "NexoRutaFirebaseAndroidConfig=$config_path" >> "$GITHUB_ENV"
 
       - name: Restore locked Android dependencies
         run: dotnet restore src/NexoRuta.Mobile/NexoRuta.Mobile.csproj --locked-mode -p:TargetFramework=net10.0-android -p:RuntimeIdentifier=android-arm64 -p:NuGetLockFilePath=packages.android.lock.json
@@ -109,6 +142,8 @@ jobs:
             -p:AndroidPackageFormats=apk \
             -p:NexoRutaBackendTarget=GcpDemo \
             -p:NexoRutaGcpApiOrigin="$NEXORUTA_GCP_API_ORIGIN" \
+            -p:NexoRutaFirebaseAndroidConfig="$NexoRutaFirebaseAndroidConfig" \
+            -p:NexoRutaMapboxPublicToken="$NEXORUTA_MAPBOX_PUBLIC_TOKEN" \
             -p:AndroidR8JarPath="${{ steps.r8.outputs.jar }}" \
             -p:ApplicationDisplayVersion="${{ steps.version.outputs.version }}" \
             -p:ApplicationVersion="${{ github.run_number }}" \
@@ -141,7 +176,7 @@ jobs:
           - Android ARM64; firma de desarrollo estable para las siguientes versiones de desarrollo.
           - No es una distribución de producción ni está publicada en Play Store.
           - Se conecta al origen API de la demo GCP: $NEXORUTA_GCP_API_ORIGIN (el backend debe estar activo).
-          - No incluye Firebase ni Mapbox; notificaciones push y el mapa requieren esas configuraciones aparte.
+          - Incluye Firebase Cloud Messaging para Android y el token público de Mapbox configurado.
           - Verifica el archivo con SHA256SUMS antes de instalarlo.
           EOF
           gh release create "$RELEASE_TAG" \
