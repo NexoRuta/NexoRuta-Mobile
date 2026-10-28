@@ -28,6 +28,8 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
+    env:
+      NEXORUTA_GCP_API_ORIGIN: ${{ vars.NEXORUTA_GCP_API_ORIGIN }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -48,6 +50,20 @@ jobs:
       - name: Prepare R8 required by Kotlin
         id: r8
         run: echo "jar=$(python3 tools/preparar-r8.py)" >> "$GITHUB_OUTPUT"
+
+      - name: Validate the GCP API origin
+        run: |
+          python3 - <<'PY'
+          import os
+          from urllib.parse import urlsplit
+
+          origin = os.environ.get('NEXORUTA_GCP_API_ORIGIN', '')
+          parsed = urlsplit(origin)
+          if (parsed.scheme != 'https' or not parsed.hostname or parsed.path != '/'
+                  or parsed.username or parsed.password or parsed.query or parsed.fragment):
+              raise SystemExit('Set the repository variable NEXORUTA_GCP_API_ORIGIN to the public HTTPS API origin, including its trailing slash.')
+          print(f'Using GCP API origin: {origin}')
+          PY
 
       - name: Restore locked Android dependencies
         run: dotnet restore src/NexoRuta.Mobile/NexoRuta.Mobile.csproj --locked-mode -p:TargetFramework=net10.0-android -p:RuntimeIdentifier=android-arm64 -p:NuGetLockFilePath=packages.android.lock.json
@@ -91,6 +107,8 @@ jobs:
             --framework net10.0-android \
             -p:RuntimeIdentifier=android-arm64 \
             -p:AndroidPackageFormats=apk \
+            -p:NexoRutaBackendTarget=GcpDemo \
+            -p:NexoRutaGcpApiOrigin="$NEXORUTA_GCP_API_ORIGIN" \
             -p:AndroidR8JarPath="${{ steps.r8.outputs.jar }}" \
             -p:ApplicationDisplayVersion="${{ steps.version.outputs.version }}" \
             -p:ApplicationVersion="${{ github.run_number }}" \
@@ -122,7 +140,8 @@ jobs:
 
           - Android ARM64; firma de desarrollo estable para las siguientes versiones de desarrollo.
           - No es una distribución de producción ni está publicada en Play Store.
-          - No incluye Firebase, Mapbox ni una URL de backend de producción; conserva la configuración local predeterminada.
+          - Se conecta al origen API de la demo GCP: $NEXORUTA_GCP_API_ORIGIN (el backend debe estar activo).
+          - No incluye Firebase ni Mapbox; notificaciones push y el mapa requieren esas configuraciones aparte.
           - Verifica el archivo con SHA256SUMS antes de instalarlo.
           EOF
           gh release create "$RELEASE_TAG" \

@@ -79,9 +79,9 @@ El puerto de conexión está en la pantalla principal de depuración inalámbric
 
 ## APK de desarrollo
 
-Las versiones de desarrollo para Android ARM64 se publican como [pre-releases descargables](https://github.com/NexoRuta/NexoRuta-Mobile/releases) al integrar cambios de la app en `main`. Cada release incluye el APK y su checksum SHA-256. Usa una clave de desarrollo dedicada y estable para poder actualizar entre estas versiones; no es la clave de distribución.
+Las versiones de desarrollo para Android ARM64 se publican como [pre-releases descargables](https://github.com/NexoRuta/NexoRuta-Mobile/releases) al integrar cambios de la app en `main`. Cada release incluye el APK y su checksum SHA-256. Usa una clave de desarrollo dedicada y estable para poder actualizar entre estas versiones; no es la clave de distribución. La build queda configurada para conectar al origen HTTPS público de la API GCP indicado por la variable de Actions `NEXORUTA_GCP_API_ORIGIN` del repositorio Mobile.
 
-El APK conserva la configuración local predeterminada (`https://localhost:5843/`) y no incluye Firebase ni Mapbox. Sirve para instalar y probar la app en un entorno local configurado; no es una build lista para producción. Al cambiar más adelante a la clave de distribución habrá que instalar esa versión como una app nueva.
+El backend demo puede estar apagado hasta que se inicie desde los controles de VM. La build no incluye Firebase ni Mapbox, así que notificaciones push y mapa requieren esas configuraciones aparte. No es una build de producción; al cambiar más adelante a la clave de distribución habrá que instalar esa versión como una app nueva.
 
 ## Compilar y comprobar
 
