@@ -1,0 +1,135 @@
+name: Mobile development APK
+run-name: Mobile development APK / ${{ github.ref_name }}
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/release-dev.yml'
+      - 'Directory.*'
+      - 'NuGet.Config'
+      - 'NexoRuta.sln'
+      - 'global.json'
+      - 'src/**'
+      - 'tools/preparar-r8.py'
+      - '**/packages*.lock.json'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mobile-dev-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release_android:
+    name: Build and publish Android development APK
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/packages*.lock.json'
+
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: microsoft
+          java-version: '21'
+
+      - name: Install the SDK-pinned MAUI Android workload
+        run: dotnet workload install maui-android --skip-manifest-update
+
+      - name: Prepare R8 required by Kotlin
+        id: r8
+        run: echo "jar=$(python3 tools/preparar-r8.py)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore locked Android dependencies
+        run: dotnet restore src/NexoRuta.Mobile/NexoRuta.Mobile.csproj --locked-mode -p:TargetFramework=net10.0-android -p:RuntimeIdentifier=android-arm64 -p:NuGetLockFilePath=packages.android.lock.json
+
+      - name: Install Android dependencies
+        run: dotnet build src/NexoRuta.Mobile/NexoRuta.Mobile.csproj -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="$ANDROID_HOME" -p:JavaSdkDirectory="$JAVA_HOME" -p:AcceptAndroidSdkLicenses=true
+
+      - name: Prepare the stable development signing key
+        env:
+          ANDROID_DEV_KEYSTORE_BASE64: ${{ secrets.MOBILE_DEV_KEYSTORE_BASE64 }}
+          ANDROID_DEV_KEYSTORE_PASSWORD: ${{ secrets.MOBILE_DEV_KEYSTORE_PASSWORD }}
+        run: |
+          if [[ -z "$ANDROID_DEV_KEYSTORE_BASE64" || -z "$ANDROID_DEV_KEYSTORE_PASSWORD" ]]; then
+            echo '::error::Configure MOBILE_DEV_KEYSTORE_BASE64 and MOBILE_DEV_KEYSTORE_PASSWORD repository secrets.'
+            exit 1
+          fi
+          key_path="$RUNNER_TEMP/nexoruta-mobile-dev.p12"
+          printf '%s' "$ANDROID_DEV_KEYSTORE_BASE64" | base64 --decode > "$key_path"
+          chmod 600 "$key_path"
+          echo "AndroidSigningKeyStore=$key_path" >> "$GITHUB_ENV"
+
+      - name: Set the development release version
+        id: version
+        run: |
+          version="1.0.0-dev.${GITHUB_RUN_NUMBER}"
+          {
+            echo "version=$version"
+            echo "tag=mobile-v$version"
+            echo "apk=NexoRuta-Repartidor-$version.apk"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build signed Android ARM64 APK
+        env:
+          AndroidKeyStore: 'true'
+          AndroidSigningKeyAlias: nexoruta-mobile-dev
+          AndroidSigningKeyPass: ${{ secrets.MOBILE_DEV_KEYSTORE_PASSWORD }}
+          AndroidSigningStorePass: ${{ secrets.MOBILE_DEV_KEYSTORE_PASSWORD }}
+        run: |
+          dotnet build src/NexoRuta.Mobile/NexoRuta.Mobile.csproj \
+            --configuration Release \
+            --framework net10.0-android \
+            -p:RuntimeIdentifier=android-arm64 \
+            -p:AndroidPackageFormats=apk \
+            -p:AndroidR8JarPath="${{ steps.r8.outputs.jar }}" \
+            -p:ApplicationDisplayVersion="${{ steps.version.outputs.version }}" \
+            -p:ApplicationVersion="${{ github.run_number }}" \
+            --no-restore
+
+      - name: Prepare APK and checksum
+        env:
+          APK_NAME: ${{ steps.version.outputs.apk }}
+        run: |
+          set -euo pipefail
+          mapfile -t apks < <(find src/NexoRuta.Mobile/bin/Release/net10.0-android/android-arm64 -maxdepth 1 -type f -name '*-Signed.apk')
+          if [[ "${#apks[@]}" -ne 1 ]]; then
+            echo "Expected one signed APK; found ${#apks[@]}." >&2
+            exit 1
+          fi
+          mkdir -p dist
+          install -m 0644 "${apks[0]}" "dist/$APK_NAME"
+          (cd dist && sha256sum "$APK_NAME" > SHA256SUMS)
+
+      - name: Publish development pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          APK_NAME: ${{ steps.version.outputs.apk }}
+        run: |
+          cat > dist/RELEASE_NOTES.md <<EOF
+          APK de desarrollo generado desde $GITHUB_SHA.
+
+          - Android ARM64; firma de desarrollo estable para las siguientes versiones de desarrollo.
+          - No es una distribución de producción ni está publicada en Play Store.
+          - No incluye Firebase, Mapbox ni una URL de backend de producción; conserva la configuración local predeterminada.
+          - Verifica el archivo con SHA256SUMS antes de instalarlo.
+          EOF
+          gh release create "$RELEASE_TAG" \
+            "dist/$APK_NAME#APK Android ARM64" \
+            "dist/SHA256SUMS#SHA256SUMS" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "NexoRuta Repartidor $RELEASE_VERSION" \
+            --notes-file dist/RELEASE_NOTES.md \
+            --prerelease
