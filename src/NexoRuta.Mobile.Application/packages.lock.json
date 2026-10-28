@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0": {
+      "Microsoft.NET.ILLink.Tasks": {
+        "type": "Direct",
+        "requested": "[10.0.12, )",
+        "resolved": "10.0.12",
+        "contentHash": "xi+BDjFpW+Sb+MHFHaH6Y/gV9I8BluFwRXc1QyCdoZbIK26eNiBeFuMTe/FMwc33G1wdHCyDg7CVTmb8OdQrMQ=="
+      },
+      "Microsoft.Data.Sqlite.Core": {
+        "type": "Transitive",
+        "resolved": "10.0.12",
+        "contentHash": "2aL9eL5HQr0V4b8V909SD+jQAx6qnTTl7sT/v3D8dIvmr2UGdpZIQxqm1pj2Js3e4EYTvpw0oMH7DjapJJuPPw==",
+        "dependencies": {
+          "SQLitePCLRaw.core": "2.1.12"
+        }
+      },
+      "SQLite3MC.PCLRaw.bundle": {
+        "type": "Transitive",
+        "resolved": "2.6.1",
+        "contentHash": "ideIAAaHiy9OX0u2A+UFvDUPFm2BGERax3EXEhKHrLQJDuGA+pGicarhNjIoohM0a0YjFi8MdlKIZuv3ftp7Vw==",
+        "dependencies": {
+          "SQLite3MC.PCLRaw.lib": "2.6.1",
+          "SQLite3MC.PCLRaw.provider": "2.6.1"
+        }
+      },
+      "SQLite3MC.PCLRaw.lib": {
+        "type": "Transitive",
+        "resolved": "2.6.1",
+        "contentHash": "X1XqnN35+/53ZryMSR/ogqSBcHJ+iUwCTkXP6GDHoxWZbbGz31j1Xi1HSvfsjS5V2iRuloUBDrdev0gvhqQGJg=="
+      },
+      "SQLite3MC.PCLRaw.provider": {
+        "type": "Transitive",
+        "resolved": "2.6.1",
+        "contentHash": "JKfx7q5Gha9LGZShmB3N+4rcr816MssWR4ZGrortYTDx9G+RbWzJGItT6ZUJlDnd8ElQXjYcjXF0zNWmeTUs6g==",
+        "dependencies": {
+          "SQLitePCLRaw.core": "3.0.2"
+        }
+      },
+      "SQLitePCLRaw.core": {
+        "type": "Transitive",
+        "resolved": "3.0.2",
+        "contentHash": "tnbRf0muOOSJK1RLCfyYK13jynFScgL4xMj7yC3oy8lrrGKXTKmOoWjfdV+cFfBRdppm4qST31hvp8ihgIgvMQ=="
+      },
+      "nexoruta.mobile.api": {
+        "type": "Project",
+        "dependencies": {
+          "NexoRuta.Mobile.Core": "[1.0.0, )"
+        }
+      },
+      "nexoruta.mobile.core": {
+        "type": "Project"
+      },
+      "nexoruta.mobile.storage": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.Data.Sqlite.Core": "[10.0.12, )",
+          "NexoRuta.Mobile.Core": "[1.0.0, )",
+          "SQLite3MC.PCLRaw.bundle": "[2.6.1, )"
+        }
+      }
+    }
+  }
+}
