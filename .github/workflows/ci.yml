@@ -2,9 +2,8 @@ name: Mobile CI
 run-name: Mobile CI / ${{ github.event.pull_request.number || github.ref_name }}
 
 on:
-  push:
-    branches: [develop]
   pull_request:
+    types: [opened, edited, reopened, synchronize]
     branches: [develop, main]
   workflow_dispatch:
 
@@ -16,7 +15,30 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  source_policy:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require develop as the source for main
+        env:
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPOSITORY: ${{ github.repository }}
+          BASE_BRANCH: ${{ github.base_ref }}
+        if: github.event_name == 'pull_request'
+        run: |
+          if [[ "$BASE_BRANCH" == main ]]; then
+            if [[ "$PR_HEAD_REPOSITORY" != "$BASE_REPOSITORY" ]]; then
+              echo "Pull requests into main must come from this repository's develop branch." >&2
+              exit 1
+            fi
+            if [[ "$PR_HEAD_REF" != develop ]]; then
+              echo "Pull requests into main must come from develop." >&2
+              exit 1
+            fi
+          fi
+
   workflow_lint:
+    needs: source_policy
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -24,6 +46,7 @@ jobs:
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 .github/workflows/*.yml
 
   pruebas:
+    needs: source_policy
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -50,6 +73,7 @@ jobs:
           retention-days: 14
 
   android:
+    needs: source_policy
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -87,7 +111,7 @@ jobs:
   result:
     name: Mobile CI / result
     if: always()
-    needs: [workflow_lint, pruebas, android]
+    needs: [source_policy, workflow_lint, pruebas, android]
     runs-on: ubuntu-24.04
     steps:
       - name: Requerir todas las validaciones mobile
