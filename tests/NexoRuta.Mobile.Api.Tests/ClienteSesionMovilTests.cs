@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using NexoRuta.Mobile.Api.Identidad;
 using NexoRuta.Mobile.Core.Jornadas;
+using NexoRuta.Mobile.Core.Rutas;
 
 namespace NexoRuta.Mobile.Api.Tests;
 
@@ -59,13 +60,34 @@ public sealed partial class ClienteSesionMovilTests
     }
 
     [Fact]
+    public async Task IngresoRegistraResultadoSeguroSinExponerCredencialesNiTokens()
+    {
+        var diagnosticos = new List<string>();
+        using var cliente = new ClienteSesionMovil(Api, new Almacen(), new Transporte((request, _) =>
+            Task.FromResult(Json(request.RequestUri!.AbsolutePath.EndsWith("login")
+                ? TokensJson()
+                : ContextoJson(Cuenta)))), new Reloj(), diagnosticos.Add);
+
+        await cliente.IngresarAsync("repartidor@example.test", "password-de-prueba");
+
+        Assert.Contains("auth.login.response.status=200", diagnosticos);
+        Assert.Contains("session.login.identity_matches=true", diagnosticos);
+        Assert.Contains("session.login.persisted=true", diagnosticos);
+        var contenido = string.Join('|', diagnosticos);
+        Assert.DoesNotContain("password-de-prueba", contenido);
+        Assert.DoesNotContain("jwt-inicial", contenido);
+        Assert.DoesNotContain(Refresh, contenido);
+    }
+
+    [Fact]
     public async Task ReingresoDeOtraCuentaRevocaSoloSesionNuevaYConservaLaAnterior()
     {
         var almacen = ConSesion();
         var anterior = almacen.Estado;
         var otra = new CuentaMovil(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
         var revocaciones = 0;
-        using var cliente = Crear(almacen, (request, _) =>
+        var diagnosticos = new List<string>();
+        using var cliente = new ClienteSesionMovil(Api, almacen, new Transporte((request, _) =>
         {
             var ruta = request.RequestUri!.AbsolutePath;
             if (ruta.EndsWith("login")) return Task.FromResult(Json(TokensJson()));
@@ -76,9 +98,75 @@ public sealed partial class ClienteSesionMovilTests
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NoContent));
             }
             return Task.FromResult(Json(ContextoJson(otra)));
-        });
+        }), new Reloj(), diagnosticos.Add);
 
         await ErrorAsync(ErrorSesionMovil.CuentaDiferente, () => cliente.IngresarAsync("otra@example.test", "clave"));
+        Assert.Same(anterior, almacen.Estado);
+        Assert.Equal(1, revocaciones);
+        Assert.Contains("auth.login.response.status=200", diagnosticos);
+        Assert.Contains("session.login.identity_matches=false", diagnosticos);
+        Assert.Contains("session.login.followup_failure=SesionMovilException", diagnosticos);
+    }
+
+    [Fact]
+    public async Task ReingresoConElMismoUsuarioYOperadorPeroOtroAccesoNoVinculaLaCuenta()
+    {
+        var almacen = ConSesion();
+        var otra = new CuentaMovil(Cuenta.UsuarioId, Guid.NewGuid(), Cuenta.OperadorId);
+        var diagnosticos = new List<string>();
+        using var cliente = new ClienteSesionMovil(Api, almacen, new Transporte((request, _) =>
+            Task.FromResult(Json(request.RequestUri!.AbsolutePath.EndsWith("login")
+                ? TokensJson()
+                : ContextoJson(otra)))), new Reloj(), diagnosticos.Add);
+
+        await ErrorAsync(ErrorSesionMovil.CuentaDiferente, () => cliente.IngresarAsync("mismo@example.test", "clave"));
+
+        Assert.Contains("session.login.user_matches=true", diagnosticos);
+        Assert.Contains("session.login.access_matches=false", diagnosticos);
+        Assert.Contains("session.login.operator_matches=true", diagnosticos);
+    }
+
+    [Fact]
+    public async Task ReautenticacionExplicitaConIdentidadRenovadaDelMismoOperadorGuardaSesionSinMigrarDatos()
+    {
+        var almacen = ConSesion();
+        var autenticada = new CuentaMovil(Guid.NewGuid(), Guid.NewGuid(), Cuenta.OperadorId);
+        using var cliente = Crear(almacen, (request, _) =>
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            return Task.FromResult(Json(path.EndsWith("login") ? TokensJson(refresh: SiguienteRefresh)
+                : path.EndsWith("perfil") ? PerfilJson(autenticada) : ContextoJson(autenticada)));
+        });
+
+        var resultado = await cliente.IngresarAsync("mismo@example.test", "clave", permitirCambioIdentidadEnMismoOperador: true);
+
+        Assert.Equal(autenticada, resultado);
+        Assert.Equal(autenticada, almacen.Estado!.Cuenta);
+        Assert.Equal(SiguienteRefresh, almacen.Estado.Tokens!.RefreshToken);
+    }
+
+    [Fact]
+    public async Task ReautenticacionNoPermiteCambiarDeOperadorAunqueElLlamadorLoAutorice()
+    {
+        var almacen = ConSesion();
+        var anterior = almacen.Estado;
+        var otroOperador = new CuentaMovil(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        var revocaciones = 0;
+        using var cliente = Crear(almacen, (request, _) =>
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            if (path.EndsWith("login")) return Task.FromResult(Json(TokensJson()));
+            if (path.EndsWith("logout"))
+            {
+                revocaciones++;
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NoContent));
+            }
+            return Task.FromResult(Json(ContextoJson(otroOperador)));
+        });
+
+        await ErrorAsync(ErrorSesionMovil.CuentaDiferente, () => cliente.IngresarAsync(
+            "otra@example.test", "clave", permitirCambioIdentidadEnMismoOperador: true));
+
         Assert.Same(anterior, almacen.Estado);
         Assert.Equal(1, revocaciones);
     }
@@ -202,6 +290,64 @@ public sealed partial class ClienteSesionMovilTests
 
         Assert.Empty(await cliente.ObtenerPermisosAsync());
         Assert.Equal(new[] { "/api/usuarios/actual/permisos", "/api/auth/mobile/refresh", "/api/usuarios/actual/permisos" }, rutas);
+    }
+
+    [Fact]
+    public async Task ConsultaHojaUsaFechaCalendarioSeleccionadaYNoInterpretaCeroResultadosComoFallo()
+    {
+        var almacen = ConSesion();
+        var eventos = new List<string>();
+        using var cliente = new ClienteSesionMovil(Api, almacen, new Transporte((request, _) =>
+        {
+            Assert.Equal("/api/mobile/rutas", request.RequestUri!.AbsolutePath);
+            Assert.Equal("?fecha=2026-10-31", request.RequestUri.Query);
+            Assert.Equal("jwt-inicial", request.Headers.Authorization!.Parameter);
+            return Task.FromResult(Json("[]"));
+        }), new Reloj(), eventos.Add);
+
+        var hojas = await cliente.ObtenerHojasAsync(new DateOnly(2026, 10, 31));
+
+        Assert.Empty(hojas);
+        Assert.Equal(Cuenta, await cliente.ObtenerCuentaLocalAsync());
+        Assert.Contains("api.mobile_routes.request.date=2026-10-31", eventos);
+    }
+
+    [Fact]
+    public async Task ConsultaDeHojaExponeLaFechaHttpDelServidorParaLaElegibilidadDeInicio()
+    {
+        var almacen = ConSesion();
+        var fechaServidor = new DateTimeOffset(2026, 10, 31, 3, 30, 0, TimeSpan.Zero);
+        using var cliente = new ClienteSesionMovil(Api, almacen, new Transporte((_, _) =>
+        {
+            var respuesta = Json("[]");
+            respuesta.Headers.Date = fechaServidor;
+            return Task.FromResult(respuesta);
+        }), new Reloj());
+
+        var (hojas, recibida) = await cliente.ObtenerHojasConFechaServidorAsync(new DateOnly(2026, 10, 31));
+
+        Assert.Empty(hojas);
+        Assert.Equal(fechaServidor, recibida);
+    }
+
+    [Fact]
+    public async Task ConsultaHojaRegistraRespuestaHttpSinCredencialesNiContenido()
+    {
+        var almacen = ConSesion();
+        var eventos = new List<string>();
+        using var cliente = new ClienteSesionMovil(Api, almacen, new Transporte((request, _) =>
+            Task.FromResult(Json("respuesta no registrada", HttpStatusCode.Unauthorized))), new Reloj(), eventos.Add);
+
+        await ErrorAsync(ErrorSesionMovil.ReingresoNecesario,
+            () => cliente.ObtenerHojasAsync(new DateOnly(2026, 10, 31)));
+
+        Assert.Contains("api.mobile_routes.response.status=401", eventos);
+        Assert.Contains("session.refresh.response.status=401", eventos);
+        var log = string.Join("\n", eventos);
+        Assert.DoesNotContain("jwt-inicial", log);
+        Assert.DoesNotContain(Refresh, log);
+        Assert.DoesNotContain("respuesta no registrada", log);
+        Assert.DoesNotContain("api.nexoruta.test", log);
     }
 
     [Fact]
@@ -436,6 +582,12 @@ public sealed partial class ClienteSesionMovilTests
         usuarioId = cuenta.UsuarioId, accesoId = cuenta.AccesoId, operadorId = cuenta.OperadorId,
         comercioId = (Guid?)null, rolId = Guid.NewGuid(), rolCodigo = "rol-operador", tipo = "Operador",
         usuarioEmail = "u@example.test", operadorNombre = "Operador", tipoAcceso = 0
+    });
+
+    private static string PerfilJson(CuentaMovil cuenta) => JsonSerializer.Serialize(new
+    {
+        accesoId = cuenta.AccesoId, usuarioId = cuenta.UsuarioId, operadorId = cuenta.OperadorId,
+        nombre = "Repartidor", activo = true, version = 1
     });
 
     private static HttpResponseMessage Json(string contenido, HttpStatusCode status = HttpStatusCode.OK) =>

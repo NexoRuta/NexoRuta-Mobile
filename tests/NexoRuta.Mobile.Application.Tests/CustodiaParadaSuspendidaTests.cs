@@ -43,6 +43,21 @@ public sealed class CustodiaParadaSuspendidaTests
         Assert.True(VistaParada.PuedeIniciar(original, remota, []));
     }
 
+    [Fact]
+    public void LaElegibilidadDeInicioRespetaLaFechaCalendarioDeLaZonaDelOperador()
+    {
+        var hoja = new HojaRuta
+        {
+            Fecha = new DateOnly(2026, 10, 31),
+            Politica = new() { ZonaHoraria = "America/Montevideo" }
+        };
+
+        Assert.False(VistaParada.EsFechaInicioPermitida(hoja,
+            new DateTimeOffset(2026, 10, 30, 2, 30, 0, TimeSpan.Zero)));
+        Assert.True(VistaParada.EsFechaInicioPermitida(hoja,
+            new DateTimeOffset(2026, 10, 31, 3, 30, 0, TimeSpan.Zero)));
+    }
+
     [Theory]
     [InlineData("Deposito", false, "en depósito")]
     [InlineData("Deposito", true, "devolver en rendición")]

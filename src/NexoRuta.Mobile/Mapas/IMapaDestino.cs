@@ -4,5 +4,7 @@ namespace NexoRuta.Mobile.Mapas;
 public interface IMapaDestino : IDisposable
 {
     View Vista { get; }
-    void Mostrar(ParadaRuta parada);
+    string EstadoInicial { get; }
+    event Action<string>? EstadoCambiado;
+    void Mostrar(IReadOnlyCollection<ParadaRuta> paradas);
 }

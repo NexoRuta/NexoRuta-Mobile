@@ -69,8 +69,10 @@ public sealed class SincronizadorJornadaTests
     public async Task ConflictoSeConfirmaComoHechoDurableSinPromoverSuVersionRemota()
     {
         using var f = new Escenario(); await f.Preparar();
+        var solicitudes = 0;
         using var cliente = f.Cliente(async (request, ct) =>
         {
+            solicitudes++;
             var comando = JsonSerializer.Deserialize(await request.Content!.ReadAsByteArrayAsync(ct), ContratosRepartoJson.Default.SobreOperacion)!;
             if (comando.Tipo != "EntregaFisica") return Confirmar(comando, f.Envio);
             return Json(new ConfirmacionOperacion { Id = comando.Id, Secuencia = comando.Secuencia, Resultado = "Conflicto",
@@ -80,9 +82,11 @@ public sealed class SincronizadorJornadaTests
         Assert.Equal(5, await sync.SincronizarAsync(f.Cuenta, f.Jornada.Id));
         var confirmaciones = await f.Datos.LeerConfirmacionesAsync(f.Cuenta, f.Jornada.Id);
         var conflicto = JsonSerializer.Deserialize(confirmaciones[3], ContratosRepartoJson.Default.ConfirmacionOperacion)!;
-        Assert.Equal("Conflicto", conflicto.Resultado); Assert.Empty(conflicto.VersionesEnvio);
+        Assert.Equal("Conflicto", conflicto.Resultado); Assert.Equal("Reasignado en el servidor", conflicto.Detalle); Assert.Empty(conflicto.VersionesEnvio);
         Assert.False((await f.Datos.LeerAsync(f.Cuenta, f.Jornada.Id))!.TienePendientes);
         Assert.Equal(5, (await f.Datos.LeerAsync(f.Cuenta, f.Jornada.Id))!.Operaciones.Count);
+        Assert.Equal(0, await sync.SincronizarAsync(f.Cuenta, f.Jornada.Id));
+        Assert.Equal(5, solicitudes);
     }
 
     [Fact]

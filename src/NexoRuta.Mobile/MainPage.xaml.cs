@@ -96,8 +96,14 @@ public partial class MainPage : ContentPage
 
     private async Task AbrirHojaAsync(HojaRuta hoja)
     {
-        var pagina = new HojaRutaPage(hoja, modelo.Cuenta, Handler!.MauiContext!.Services);
+        var pagina = new HojaRutaPage(hoja, modelo.Cuenta, Handler!.MauiContext!.Services, RetomarHojaAsync);
         await Navigation.PushAsync(pagina);
+    }
+
+    private async Task RetomarHojaAsync(HojaRuta hoja)
+    {
+        if (Navigation.NavigationStack.LastOrDefault() is HojaRutaPage) await Navigation.PopAsync();
+        await AbrirHojaAsync(hoja);
     }
 
     public void CambiarPorSwipe(bool haciaLaDerecha)

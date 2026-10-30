@@ -1,0 +1,14 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "NexoRuta Repartidor (Android)",
+      "type": "maui",
+      "request": "launch",
+      "preLaunchTask": "maui: Build",
+      "project": "${workspaceFolder}/src/NexoRuta.Mobile/NexoRuta.Mobile.csproj",
+      "configuration": "Debug",
+      "targetFramework": "net10.0-android"
+    }
+  ]
+}
