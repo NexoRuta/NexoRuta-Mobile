@@ -11,5 +11,7 @@ public enum ErrorSesionMovil
     RespuestaInvalida,
     EstadoLocalInvalido,
     RecursoNoDisponible,
-    ConflictoServidor
+    ConflictoServidor,
+    ReautenticarParaCerrarSesion,
+    CierreNoConfirmado
 }

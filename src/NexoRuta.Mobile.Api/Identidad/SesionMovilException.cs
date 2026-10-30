@@ -11,6 +11,8 @@ public sealed class SesionMovilException(ErrorSesionMovil error) : Exception(err
     ErrorSesionMovil.EstadoLocalInvalido => "No se pudo recuperar la sesión local. Se conservan los datos existentes.",
     ErrorSesionMovil.RecursoNoDisponible => "El aviso o la ruta ya no están disponibles para esta cuenta.",
     ErrorSesionMovil.ConflictoServidor => "Hay cambios en el servidor. Sincronizá para revisar el estado actual.",
+    ErrorSesionMovil.ReautenticarParaCerrarSesion => "Volvé a ingresar con la misma cuenta para cerrar la sesión. Tus datos locales se conservan.",
+    ErrorSesionMovil.CierreNoConfirmado => "No recibimos confirmación del cierre. Tu cuenta y el trabajo local se conservan; reconectate y volvé a intentarlo.",
     _ => "El servicio devolvió una respuesta de sesión inválida."
 })
 {

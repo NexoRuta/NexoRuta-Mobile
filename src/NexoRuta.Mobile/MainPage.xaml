@@ -12,7 +12,7 @@
    <VerticalStackLayout Spacing="8"><Label Text="Tu jornada,&#10;en un solo lugar." FontSize="34" FontFamily="OpenSansSemibold" LineHeight="1.05" SemanticProperties.HeadingLevel="Level1" /><Label Text="Ingresá para ver tu hoja de ruta y comenzar el reparto." Style="{StaticResource Caption}" FontSize="16" /></VerticalStackLayout>
    <Border Style="{StaticResource Card}"><VerticalStackLayout Spacing="16">
     <Label Text="Bienvenido" Style="{StaticResource SectionTitle}" SemanticProperties.HeadingLevel="Level2" />
-    <Grid IsVisible="{Binding TieneCuenta}"><Button Text="Continuar mi jornada" Command="{Binding Desbloquear}" /></Grid>
+    <Grid IsVisible="{Binding PuedeContinuarSinConexion}"><VerticalStackLayout Spacing="6"><Button Text="Continuar sin conexión" Command="{Binding Desbloquear}" /><Label Text="Abre únicamente datos guardados; no renueva la sesión del servidor." Style="{StaticResource Caption}" /></VerticalStackLayout></Grid>
     <Label Text="Correo electrónico" FontFamily="OpenSansSemibold" FontSize="13" />
     <Border Style="{StaticResource InputFrame}"><Entry Text="{Binding Email}" Placeholder="nombre@empresa.com" Keyboard="Email" ReturnType="Next" IsEnabled="{Binding ServicioConfigurado}" AutomationId="CorreoIngreso" SemanticProperties.Description="Correo electrónico" /></Border>
     <Label Text="Contraseña" FontFamily="OpenSansSemibold" FontSize="13" />

@@ -118,6 +118,40 @@ public sealed class MapasOfflineTests : IDisposable
         Assert.True((await servicio.ConsultarAsync(cuenta, hoja)).Preparada);
         Assert.Equal(anterior, Assert.Single(proveedor.Regiones.Keys));
     }
+
+    [Fact]
+    public async Task PreparacionUsaSoloLosPuntosQueSeMuestranEnElMapa()
+    {
+        var incluida = new ParadaRuta { EnvioId = Guid.NewGuid(), Latitud = -34.9, Longitud = -56.2 };
+        var suspendida = new ParadaRuta { EnvioId = Guid.NewGuid(), Latitud = 48, Longitud = 2, Activa = false };
+        using var db = new RepositorioJornadasSqlite(raiz, claves);
+        using var servicio = new ServicioPreparacionMapa(db, proveedor);
+
+        var hojaConSuspension = new HojaRuta { Id = hoja.Id, Paradas = [incluida, suspendida] };
+        var resultado = await servicio.DescargarAsync(cuenta, hojaConSuspension, new[] { incluida }, progreso);
+
+        Assert.True(resultado.Preparada);
+        Assert.Equal(-34.915, proveedor.UltimaZona!.LatitudMinima, 6);
+        Assert.Equal(-56.215, proveedor.UltimaZona.LongitudMinima, 6);
+        Assert.Equal(-34.885, proveedor.UltimaZona.LatitudMaxima, 6);
+        Assert.Equal(-56.185, proveedor.UltimaZona.LongitudMaxima, 6);
+    }
+
+    [Fact]
+    public async Task MapaSinPuntosNoCreaUnaRegionNiPresentaPreparacion()
+    {
+        using var db = new RepositorioJornadasSqlite(raiz, claves);
+        using var servicio = new ServicioPreparacionMapa(db, proveedor);
+
+        var vacias = Array.Empty<ParadaRuta>();
+        var estado = await servicio.ConsultarAsync(cuenta, hoja, vacias);
+
+        Assert.False(estado.Preparada);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => servicio.DescargarAsync(cuenta, hoja, vacias, progreso));
+        Assert.Empty(proveedor.Regiones);
+        Assert.Null(proveedor.UltimaZona);
+    }
+
     private sealed class ProveedorFalso : IProveedorMapaOffline
     {
         public string Proveedor => "mapbox";
@@ -127,11 +161,13 @@ public sealed class MapasOfflineTests : IDisposable
         public bool CancelarDescarga { get; set; }
         public bool FallarLimpieza { get; set; }
         public Action? AlDescargar { get; set; }
+        public ZonaMapa? UltimaZona { get; private set; }
         public Dictionary<string, RecursosMapa> Regiones { get; } = [];
         public List<string> Eliminadas { get; } = [];
         public Task<RecursosMapa> ConsultarAsync(string regionId, CancellationToken ct) => Task.FromResult(Regiones.GetValueOrDefault(regionId, new(false, 0)));
         public Task DescargarAsync(string regionId, ZonaMapa zona, IProgress<ProgresoMapa> progreso, CancellationToken ct)
         {
+            UltimaZona = zona;
             Regiones[regionId] = new(CompletarDescarga, 1024);
             if (CancelarDescarga) throw new OperationCanceledException();
             progreso.Report(new(1, 1024)); AlDescargar?.Invoke(); return Task.CompletedTask;
