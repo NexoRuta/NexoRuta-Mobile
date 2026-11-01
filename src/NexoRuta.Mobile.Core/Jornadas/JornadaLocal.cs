@@ -14,6 +14,7 @@ public sealed class JornadaLocal
     public CuentaMovil Cuenta { get; }
     public bool EstaCerrada => operaciones[^1].Tipo == TipoOperacionLocal.FinJornada;
     public bool TienePendientes => operaciones.Any(x => !confirmadas.Contains(x.Id));
+    public int CantidadPendientes => operaciones.Count(x => !confirmadas.Contains(x.Id));
     public IReadOnlyList<OperacionLocal> Operaciones => operaciones.AsReadOnly();
 
     private JornadaLocal(Guid id, Guid rutaId, CuentaMovil cuenta,
