@@ -170,7 +170,7 @@ public sealed class HojaRutaViewModel : INotifyPropertyChanged
             if (!await interaccion.ConfirmarCierreAsync(pendientes, sinRendir)) return;
             Jornada = await datos.ModificarAsync(Cuenta, Jornada.Id, j => j.Finalizar(DateTimeOffset.UtcNow));
             seguimiento.Detener();
-            await IntentarSincronizar(); Mensaje = "Jornada finalizada. "
+            await IntentarSincronizar(); Mensaje = "Jornada finalizada. El retorno y la disponibilidad se confirman en Backoffice. "
                 + (sinRendir > 0 ? $"Cierre con incidencia por {sinRendir} bulto(s) sin entrega ni rendición; se conserva la custodia. " : "") + Resumen;
         }), () => !Ocupado && MostrarCierre);
     }

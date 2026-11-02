@@ -21,6 +21,19 @@ public sealed class IncidenciasCierreTests
         Assert.Throws<InvalidDataException>(() => SerializadorHojaRuta.Deserializar(SerializadorHojaRuta.Serializar(ajena), cuenta));
     }
 
+    [Fact]
+    public void B3MetadataAndNextDayManualArrivalDoNotBreakAuthorizedOfflineSheet()
+    {
+        var account=new CuentaMovil(Guid.NewGuid(),Guid.NewGuid(),Guid.NewGuid());var shipment=Guid.NewGuid();var parcel=Guid.NewGuid();
+        var sheet=Hoja(account,shipment,parcel,"Repartidor",new(Guid.NewGuid(),shipment,parcel,"LOCAL-1",2,DateTimeOffset.UtcNow,DateTimeOffset.UtcNow));
+        var node=System.Text.Json.Nodes.JsonNode.Parse(SerializadorHojaRuta.Serializar(sheet))!;
+        node["planTemporal"]=new System.Text.Json.Nodes.JsonObject { ["salidaPlanificadaEnUtc"]="2026-10-21T02:00:00Z",["zonaHoraria"]="America/Montevideo" };
+        node["estadoEstimacion"]="SinEstimacion";node["salidaEnUtc"]=null;
+        node["paradas"]![0]!["llegadaEstimadaUtc"]="2026-10-21T03:15:00Z";node["paradas"]![0]!["servicioMinutos"]=20;
+        var read=SerializadorHojaRuta.Deserializar(System.Text.Encoding.UTF8.GetBytes(node.ToJsonString()),account);
+        Assert.Equal(DateTimeOffset.Parse("2026-10-21T03:15:00Z"),read.Paradas[0].LlegadaEstimadaUtc);Assert.Equal("Repartidor",read.Paradas[0].Bultos[0].Custodia);Assert.Single(read.IncidenciasCierre);
+    }
+
     private static HojaRuta Hoja(CuentaMovil cuenta, Guid envio, Guid bulto, string custodia, IncidenciaCierre incidencia) => new()
     {
         Id = Guid.NewGuid(), JornadaId = Guid.NewGuid(), RepartidorAccesoId = cuenta.AccesoId, VehiculoId = Guid.NewGuid(),
