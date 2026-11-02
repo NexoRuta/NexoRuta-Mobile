@@ -39,7 +39,8 @@ public sealed class SincronizadorJornada(ClienteSesionMovil cliente, Repositorio
             while (confirmadas < 100)
             {
                 jornada = (await datos.LeerAsync(cuenta, jornadaId, ct))!;
-                var pendiente = jornada.PrepararEnvio().OrderBy(x => x.Secuencia).FirstOrDefault();
+                var operacionesPendientes = jornada.PrepararEnvio();
+                var pendiente = operacionesPendientes.OrderBy(x => x.Secuencia).FirstOrDefault();
                 if (pendiente is null) break;
                 var sobre = await datos.LeerSobreAsync(cuenta, jornadaId, pendiente.Id, ct);
                 if (sobre is null)
@@ -56,7 +57,8 @@ public sealed class SincronizadorJornada(ClienteSesionMovil cliente, Repositorio
                     await datos.GuardarSobreAsync(cuenta, jornadaId, pendiente.Id, sobre, ct);
                 }
                 await SubirArchivos(cuenta, jornadaId, pendiente, ct);
-                var resultado = await cliente.EnviarOperacionAsync(cuenta, jornadaId, sobre, ct);
+                var resultado = await cliente.EnviarOperacionAsync(
+                    cuenta, jornadaId, sobre, pendiente.Id, jornada.CantidadPendientes, ct);
                 Validar(resultado, versiones);
                 if (resultado.Id != pendiente.Id || resultado.Secuencia != pendiente.Secuencia)
                     throw new InvalidDataException("El servidor no confirmó la operación enviada.");

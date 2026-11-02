@@ -145,7 +145,7 @@ public sealed class AvisosRepartoTests
         var otra = new CuentaMovil(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
         await Assert.ThrowsAsync<SesionMovilException>(() => cliente.ObtenerAvisoAsync(otra, f.Aviso.Id));
         await Assert.ThrowsAsync<SesionMovilException>(() => cliente.ConfirmarAvisoAsync(otra, f.Aviso.Id, "Confirmado"));
-        await Assert.ThrowsAsync<SesionMovilException>(() => cliente.EnviarOperacionAsync(otra, f.Jornada, Encoding.UTF8.GetBytes("{}")));
+        await Assert.ThrowsAsync<SesionMovilException>(() => cliente.EnviarOperacionAsync(otra, f.Jornada, Encoding.UTF8.GetBytes("{}"), Guid.NewGuid(), 0));
         await Assert.ThrowsAsync<SesionMovilException>(() => cliente.SubirEvidenciaAsync(otra, f.Jornada, f.Aviso.EnvioId, Guid.NewGuid(), "Foto", [1]));
     }
 
