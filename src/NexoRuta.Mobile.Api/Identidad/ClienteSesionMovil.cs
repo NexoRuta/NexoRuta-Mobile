@@ -34,6 +34,16 @@ public sealed partial class ClienteSesionMovil : IDisposable
         };
     }
 
+#if DEBUG
+    // Read-only development probe; uses the same transport without touching authentication or offline state.
+    public async Task<HttpStatusCode> ComprobarConexionAsync(CancellationToken ct = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(api, "health/ready"));
+        using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+        return response.StatusCode;
+    }
+#endif
+
     // Solo metadatos: no acredita desbloqueo local, jornada offline ni autorización operativa.
     public async Task<CuentaMovil?> LeerCuentaGuardadaAsync(CancellationToken ct = default)
     {

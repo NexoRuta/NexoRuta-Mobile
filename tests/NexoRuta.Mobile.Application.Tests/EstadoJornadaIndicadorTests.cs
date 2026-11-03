@@ -9,6 +9,28 @@ public sealed class EstadoJornadaIndicadorTests
     private readonly CuentaMovil cuenta = new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
     private static readonly DateTimeOffset Ahora = new(2026, 10, 30, 8, 0, 0, TimeSpan.Zero);
 
+    [Theory]
+    [InlineData("Absent")]
+    [InlineData("Pending")]
+    [InlineData("Conflicto")]
+    public void ServerEnCursoDoesNotProveDepartureWithoutAppliedLoadConfirmation(string outcome)
+    {
+        var jornada = JornadaLocal.Iniciar(Guid.NewGuid(), Guid.NewGuid(), cuenta, Ahora);
+        var receipts = new Dictionary<Guid, string> { [jornada.Operaciones[0].Id] = "Aplicada" };
+        if (outcome != "Absent")
+        {
+            var departure = jornada.ConfirmarCarga(Ahora.AddMinutes(1));
+            if (outcome != "Pending") receipts[departure.Id] = outcome;
+        }
+        var restored = JornadaLocal.Restaurar(jornada.ExportarEstado(), cuenta);
+        var state = EstadoJornadaIndicador.Crear(restored, receipts, "EnCurso");
+        Assert.True(state.Iniciada);
+        Assert.False(state.RepartoEnCurso);
+        Assert.Contains("carga", state.Fase);
+        Assert.Equal(outcome == "Pending", state.TieneOperacionesPendientes);
+        Assert.Equal(outcome == "Conflicto", state.TieneRechazos);
+    }
+
     [Fact]
     public void InicioSinAcusePermanecePendienteYNoSePresentaComoJornadaActiva()
     {

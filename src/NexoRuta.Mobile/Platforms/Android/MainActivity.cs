@@ -17,6 +17,9 @@ public class MainActivity : MauiAppCompatActivity
         base.OnCreate(savedInstanceState);
         Platforms.Android.CanalesPush.Crear();
         RecibirApertura(Intent);
+#if DEBUG && NEXORUTA_LOCAL_HTTPS
+        ComprobarConexionLocal(Intent);
+#endif
 #if VALIDAR_ALMACENAMIENTO
         var fase = Intent?.GetStringExtra("nexoruta.prueba.almacenamiento");
         if (fase is "guardar" or "leer") _ = Diagnostico.PruebaAlmacenamiento.EjecutarAsync(fase);
@@ -27,7 +30,30 @@ public class MainActivity : MauiAppCompatActivity
     {
         base.OnNewIntent(intent);
         RecibirApertura(intent);
+#if DEBUG && NEXORUTA_LOCAL_HTTPS
+        ComprobarConexionLocal(intent);
+#endif
     }
+
+#if DEBUG && NEXORUTA_LOCAL_HTTPS
+    private static async void ComprobarConexionLocal(Android.Content.Intent? intent)
+    {
+        if (!Guid.TryParse(intent?.GetStringExtra("nexoruta.dev.connection"), out var probe)) return;
+        try
+        {
+            var services = IPlatformApplication.Current!.Services;
+            var config = services.GetRequiredService<ConfiguracionAplicacion>();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            var status = await services.GetRequiredService<NexoRuta.Mobile.Api.Identidad.ClienteSesionMovil>()
+                .ComprobarConexionAsync(timeout.Token);
+            Android.Util.Log.Info("NexoRuta.Connection", $"probe={probe:D};origin={config.Api};status={(int)status}");
+        }
+        catch (Exception error)
+        {
+            Android.Util.Log.Warn("NexoRuta.Connection", $"probe={probe:D};error={error.GetType().Name};cause={error.GetBaseException().Message}");
+        }
+    }
+#endif
 
     public override bool DispatchTouchEvent(MotionEvent? ev)
     {

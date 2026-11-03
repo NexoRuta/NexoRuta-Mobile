@@ -23,8 +23,7 @@ public sealed record EstadoJornadaIndicador(string Fase, bool Iniciada, bool Rep
         var cierreResultado = cierre is null ? null : resultados.GetValueOrDefault(cierre.Id);
         var finalizada = cierreResultado == "Aplicada" || estadoServidor == "Finalizada";
         var salida = operaciones.LastOrDefault(o => o.Tipo == TipoOperacionLocal.ConfirmarCarga);
-        var reparto = iniciada && (salida is not null && resultados.GetValueOrDefault(salida.Id) == "Aplicada"
-            || estadoServidor == "EnCurso");
+        var reparto = iniciada && salida is not null && resultados.GetValueOrDefault(salida.Id) == "Aplicada";
 
         var fase = cierre is not null && cierreResultado is null ? "Cierre pendiente de sincronización"
             : cierre is not null && cierreResultado != "Aplicada" ? "Cierre rechazado · revisar jornada"

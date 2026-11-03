@@ -31,6 +31,8 @@ public sealed class HojaRutaViewModel : INotifyPropertyChanged
     public string EstadoMapa { get; private set; } = "La descarga offline es opcional; el mapa online requiere conexión.";
     private readonly Dictionary<Guid, ConfirmacionOperacion> confirmaciones = [];
     private bool ocupado;
+    private bool sincronizando;
+    private bool falloSincronizacion;
     private string mensaje = "";
     public HojaRuta Hoja { get; private set; }
     public CuentaMovil Cuenta { get; }
@@ -47,8 +49,9 @@ public sealed class HojaRutaViewModel : INotifyPropertyChanged
     private int TotalEntregas => Entregadas + Hoja.Paradas.Count(p => ParadaActiva(p) && !EntregaConfirmada(p));
     public string Etapa => Cerrada ? "JORNADA FINALIZADA" : !Iniciada ? "ANTES DE SALIR" : !Salida ? "CARGA EN DEPÓSITO" : "EN REPARTO";
     public string IndicadorJornada => EstadoJornada().Fase;
-    public string IndicadorSincronizacion => EstadoJornada().EstadoSincronizacion;
-    public bool MostrarIndicadorSincronizacion => EstadoJornada().TieneOperacionesPendientes || EstadoJornada().TieneRechazos;
+    public string IndicadorSincronizacion => Sincronizando ? "Sincronizando operaciones guardadas..."
+        : falloSincronizacion ? "No se pudo actualizar \u00b7 reintent\u00e1" : EstadoJornada().EstadoSincronizacion;
+    public bool MostrarIndicadorSincronizacion => Sincronizando || falloSincronizacion || EstadoJornada().TieneOperacionesPendientes || EstadoJornada().TieneRechazos;
     public string Indicacion => Cerrada ? "Tu recorrido terminó. Gracias por el trabajo de hoy."
         : !Iniciada && ParadasActivas == 0 ? "No hay paradas activas para iniciar. Actualizá el recorrido o contactá al depósito."
         : !Iniciada ? "Revisá tus paradas e iniciá la jornada en el depósito."
@@ -85,6 +88,7 @@ public sealed class HojaRutaViewModel : INotifyPropertyChanged
     public double Progreso => TotalEntregas == 0 ? 0 : (double)Entregadas / TotalEntregas;
     public event PropertyChangedEventHandler? PropertyChanged;
     public bool Ocupado { get => ocupado; private set { ocupado = value; Actualizar(); } }
+    public bool Sincronizando { get => sincronizando; private set { sincronizando = value; Actualizar(); } }
     public string Mensaje { get => mensaje; private set { mensaje = value; Cambiar(); Cambiar(nameof(EstadoInformativo)); } }
     public string MensajeJornadaBloqueante { get => mensajeJornadaBloqueante; private set { mensajeJornadaBloqueante = value; Cambiar(); Cambiar(nameof(MostrarBloqueoJornada)); } }
     public bool MostrarBloqueoJornada => !string.IsNullOrWhiteSpace(MensajeJornadaBloqueante);
@@ -119,11 +123,11 @@ public sealed class HojaRutaViewModel : INotifyPropertyChanged
     {
         Hoja = hoja; Cuenta = cuenta; this.datos = datos; this.seguimiento = seguimiento;
         this.avisos = avisos; this.interaccion = interaccion; this.verificacion = verificacion; this.cliente = cliente; this.sincronizador = sincronizador;
-        Iniciar = new(() => Ejecutar(IniciarJornadaAsync), () => !Ocupado && MostrarInicio && cliente is not null);
+        Iniciar = new(() => Ejecutar(IniciarJornadaAsync), () => !Ocupado && !Sincronizando && MostrarInicio && cliente is not null);
         RetomarJornada = new(async () =>
         {
             if (hojaBloqueante is { } hoja && retomarHoja is { } abrir) await abrir(hoja);
-        }, () => !Ocupado && PuedeRetomarJornada);
+        }, () => !Ocupado && !Sincronizando && PuedeRetomarJornada);
         Escanear = new(() => Ejecutar(async () =>
         {
             var codigo = await interaccion.EscanearAsync(); if (codigo is null) return;
@@ -137,7 +141,7 @@ public sealed class HojaRutaViewModel : INotifyPropertyChanged
             var operacion = Jornada.Operaciones[^1];
             await IntentarSincronizar(); Mensaje = ResultadoOperacion(operacion, "Bulto verificado por el servidor.",
                 "Bulto registrado localmente y pendiente de sincronización.");
-        }), () => !Ocupado && MostrarCarga);
+        }), () => !Ocupado && !Sincronizando && MostrarCarga);
         ConfirmarCarga = new(() => Ejecutar(async () =>
         {
             var evaluacion = EvaluacionCarga;
@@ -152,15 +156,15 @@ public sealed class HojaRutaViewModel : INotifyPropertyChanged
             Jornada = await datos.ModificarAsync(Cuenta, Jornada!.Id, j => j.ConfirmarCarga(DateTimeOffset.UtcNow));
             var operacion = Jornada.Operaciones[^1];
             await IntentarSincronizar(); Mensaje = ResultadoSalida(operacion);
-        }), () => !Ocupado && PuedeConfirmarCarga);
-        Sincronizar = new(() => Ejecutar(async () => { await IntentarSincronizar(); Mensaje = "Recorrido actualizado."; }), () => !Ocupado && Jornada is not null && sincronizador is not null);
+        }), () => !Ocupado && !Sincronizando && PuedeConfirmarCarga);
+        Sincronizar = new(ActualizarRecorridoAsync, () => !Ocupado && !Sincronizando && Jornada is not null && sincronizador is not null);
         Rendir = new(() => Ejecutar(async () =>
         {
             var seleccionados = await interaccion.SeleccionarRendicionAsync(BultosParaRendir()); if (seleccionados is null) return;
             if (!await verificacion.VerificarAsync("Confirmar la declaración de bultos devueltos al depósito")) { Mensaje = "La rendición no fue autorizada."; return; }
             Jornada = await datos.ModificarAsync(Cuenta, Jornada!.Id, j => j.DeclararRendicion(Elemento(new() { BultoIds = seleccionados }), DateTimeOffset.UtcNow));
             await IntentarSincronizar(); Mensaje = "Bultos declarados. El depósito confirmará la recepción.";
-        }), () => !Ocupado && MostrarRendicion);
+        }), () => !Ocupado && !Sincronizando && MostrarRendicion);
         Finalizar = new(() => Ejecutar(async () =>
         {
             if ((await datos.LeerCapturasAsync(Cuenta, Jornada!.Id)).Any(x => x.OperacionId is null))
@@ -170,9 +174,11 @@ public sealed class HojaRutaViewModel : INotifyPropertyChanged
             if (!await interaccion.ConfirmarCierreAsync(pendientes, sinRendir)) return;
             Jornada = await datos.ModificarAsync(Cuenta, Jornada.Id, j => j.Finalizar(DateTimeOffset.UtcNow));
             seguimiento.Detener();
-            await IntentarSincronizar(); Mensaje = "Jornada finalizada. El retorno y la disponibilidad se confirman en Backoffice. "
-                + (sinRendir > 0 ? $"Cierre con incidencia por {sinRendir} bulto(s) sin entrega ni rendición; se conserva la custodia. " : "") + Resumen;
-        }), () => !Ocupado && MostrarCierre);
+            await IntentarSincronizar();
+            Mensaje = ResultadoOperacion(Jornada.Operaciones.Last(o => o.Tipo == TipoOperacionLocal.FinJornada),
+                "Cierre confirmado por el servidor. El retorno y la disponibilidad se confirman en Backoffice.",
+                "Cierre guardado y pendiente de confirmación. Usá Actualizar para reintentar; no generes otro cierre.");
+        }), () => !Ocupado && !Sincronizando && MostrarCierre);
     }
     public async Task InicializarAsync() => await Ejecutar(async () =>
     {
@@ -289,13 +295,14 @@ public sealed class HojaRutaViewModel : INotifyPropertyChanged
         await ConsultarCambios();
         await Refrescar();
     });
-    public async Task Refrescar()
+    public Task Refrescar() => Refrescar(CancellationToken.None);
+    private async Task Refrescar(CancellationToken ct)
     {
-        var bytesRemotos = await datos.LeerVistaRemotaAsync(Cuenta, Hoja.Id);
+        var bytesRemotos = await datos.LeerVistaRemotaAsync(Cuenta, Hoja.Id, ct);
         vistaRemota = bytesRemotos is null ? null : SerializadorHojaRuta.Deserializar(bytesRemotos, Cuenta);
-        Jornada = await datos.LeerAsync(Cuenta, Hoja.JornadaId); confirmaciones.Clear();
+        Jornada = await datos.LeerAsync(Cuenta, Hoja.JornadaId, ct); confirmaciones.Clear();
         if (Jornada is not null)
-            foreach (var bytes in await datos.LeerConfirmacionesAsync(Cuenta, Jornada.Id))
+            foreach (var bytes in await datos.LeerConfirmacionesAsync(Cuenta, Jornada.Id, ct))
             {
                 var confirmada = JsonSerializer.Deserialize(bytes, ContratosRepartoJson.Default.ConfirmacionOperacion)!;
                 confirmaciones[confirmada.Id] = confirmada;
@@ -361,13 +368,14 @@ public sealed class HojaRutaViewModel : INotifyPropertyChanged
     public bool EntregaFisica(Guid envio) => Jornada?.Operaciones.Any(o => o.EnvioId == envio && o.Tipo == TipoOperacionLocal.EntregaFisica) ?? false;
     public string Estado(ParadaRuta parada) => VistaParada.Obtener(parada, vistaRemota, confirmaciones.Values).Estado;
     public bool ParadaActiva(ParadaRuta parada) => VistaParada.Obtener(parada, vistaRemota, confirmaciones.Values).Activa;
-    private async Task ConsultarCambios()
+    private async Task<bool> ConsultarCambios()
     {
-        if (avisos is null || Connectivity.Current.NetworkAccess != NetworkAccess.Internet) return;
+        if (avisos is null) return true;
+        if (Connectivity.Current.NetworkAccess != NetworkAccess.Internet) return false;
         using var limite = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-        try { await avisos.ActualizarRutaAsync(Cuenta, Hoja.Id, limite.Token); }
+        try { await avisos.ActualizarRutaAsync(Cuenta, Hoja.Id, limite.Token); return true; }
         catch (Exception ex) when (ex is HttpRequestException or SesionMovilException or OperationCanceledException)
-        { /* La hoja y los comandos originales siguen disponibles sin red. */ }
+        { return false; /* The original route and queued commands remain available offline. */ }
     }
     private bool Registrada(TipoOperacionLocal tipo) => Jornada?.Operaciones.Any(o => o.Tipo == tipo
         && confirmaciones.TryGetValue(o.Id, out var r) && r.Resultado == "Aplicada") ?? false;
@@ -501,17 +509,43 @@ public sealed class HojaRutaViewModel : INotifyPropertyChanged
                 if (op.Datos.TryGetProperty("bultoIds", out var ids)) foreach (var id in ids.EnumerateArray()) cargados.Remove(id.GetGuid());
         return Hoja.Paradas.SelectMany(x => x.Bultos).Where(x => cargados.Contains(x.Id)).ToArray();
     }
-    public async Task IntentarSincronizar()
+    private async Task ActualizarRecorridoAsync()
     {
-        if (sincronizador is null || Jornada is null) return;
-        try { await sincronizador.SincronizarAsync(Cuenta, Jornada.Id); }
-        catch (Exception ex) when (ex is HttpRequestException or SesionMovilException or OperationCanceledException) { Mensaje = "Tus cambios están guardados. Se enviarán al recuperar la conexión."; }
-        await ConsultarCambios();
-        await Refrescar();
+        if (Ocupado || Sincronizando || Jornada is null || sincronizador is null) return;
+        Sincronizando = true;
+        try
+        {
+            if (await IntentarSincronizar())
+                Mensaje = Jornada!.TienePendientes
+                    ? $"Quedan {Jornada.CantidadPendientes} operaciones por confirmar. Us\u00e1 Actualizar para continuar."
+                    : EstadoJornada().TieneRechazos ? "Hay operaciones rechazadas por el servidor. Revis\u00e1 el detalle antes de continuar."
+                    : Cerrada ? "Cierre confirmado por el servidor." : "Recorrido actualizado.";
+        }
+        catch (Exception) { falloSincronizacion = true; Mensaje = "No pudimos actualizar. Conservamos tus datos. Reintent\u00e1 con Actualizar."; }
+        finally { Sincronizando = false; }
+    }
+    public async Task<bool> IntentarSincronizar()
+    {
+        if (sincronizador is null || Jornada is null) return false;
+        falloSincronizacion = false;
+        // Match the existing reconnect budget; includes waiting for the shared sync semaphore.
+        using var limite = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+        try { await sincronizador.SincronizarAsync(Cuenta, Jornada.Id, limite.Token); }
+        catch (OperationCanceledException) { falloSincronizacion = true; Mensaje = "Se agot\u00f3 el tiempo de actualizaci\u00f3n. Tus operaciones siguen guardadas. Reintent\u00e1 con Actualizar."; }
+        catch (SesionMovilException ex) { falloSincronizacion = true; Mensaje = ex.Message + " Las operaciones pendientes siguen guardadas."; }
+        catch (HttpRequestException) { falloSincronizacion = true; Mensaje = "No pudimos conectar. Tus operaciones siguen guardadas. Reintent\u00e1 con Actualizar."; }
+        if (!await ConsultarCambios())
+        {
+            if (!falloSincronizacion) Mensaje = "No pudimos consultar los cambios del servidor. Conservamos el último estado confirmado. Reintentá con Actualizar.";
+            falloSincronizacion = true;
+        }
+        using var lectura = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await Refrescar(lectura.Token);
+        return !falloSincronizacion;
     }
     public async Task Ejecutar(Func<Task> operacion)
     {
-        if (Ocupado) return; Ocupado = true;
+        if (Ocupado || Sincronizando) return; Ocupado = true;
         try { await operacion(); }
         catch (InvalidOperationException ex) { Mensaje = ex.Message; }
         catch (SesionMovilException ex) { Mensaje = ex.Message; }
@@ -519,11 +553,16 @@ public sealed class HojaRutaViewModel : INotifyPropertyChanged
         catch (Exception) { Mensaje = "No pudimos completar la acción. Volvé a intentarlo."; }
         finally { await RefrescarSeguro(); Ocupado = false; }
     }
-    private async Task RefrescarSeguro() { try { await Refrescar(); } catch (Exception) { Mensaje = "No pudimos cargar tu recorrido. Volvé a intentarlo."; } }
+    private async Task RefrescarSeguro()
+    {
+        using var limite = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        try { await Refrescar(limite.Token); }
+        catch (Exception) { Mensaje = "No pudimos cargar tu recorrido. Volvé a intentarlo."; }
+    }
     public static JsonElement Elemento(DatosOperacionMovil datos) => JsonSerializer.SerializeToElement(datos, DatosOperacionJson.Default.DatosOperacionMovil);
     private void Actualizar()
     {
-        foreach (var propiedad in new[] { nameof(Hoja), nameof(Jornada), nameof(Ocupado), nameof(Iniciada), nameof(Cerrada), nameof(Salida), nameof(MostrarInicio), nameof(MostrarBloqueoJornada), nameof(MensajeJornadaBloqueante), nameof(PuedeRetomarJornada), nameof(MostrarCarga), nameof(MostrarCierre), nameof(MostrarRendicion), nameof(Resumen), nameof(Etapa), nameof(Indicacion), nameof(EstadoInformativo), nameof(CantidadParadas), nameof(ResumenCarga), nameof(AvisoCarga), nameof(MostrarAvisoCarga), nameof(PuedeConfirmarCarga), nameof(MostrarEstadoConfirmacionCarga), nameof(EstadoConfirmacionCarga), nameof(IndicadorJornada), nameof(IndicadorSincronizacion), nameof(MostrarIndicadorSincronizacion), nameof(EstadoMapa), nameof(Progreso), nameof(IncidenciasCierre) }) Cambiar(propiedad);
+        foreach (var propiedad in new[] { nameof(Hoja), nameof(Jornada), nameof(Ocupado), nameof(Sincronizando), nameof(Iniciada), nameof(Cerrada), nameof(Salida), nameof(MostrarInicio), nameof(MostrarBloqueoJornada), nameof(MensajeJornadaBloqueante), nameof(PuedeRetomarJornada), nameof(MostrarCarga), nameof(MostrarCierre), nameof(MostrarRendicion), nameof(Resumen), nameof(Etapa), nameof(Indicacion), nameof(EstadoInformativo), nameof(CantidadParadas), nameof(ResumenCarga), nameof(AvisoCarga), nameof(MostrarAvisoCarga), nameof(PuedeConfirmarCarga), nameof(MostrarEstadoConfirmacionCarga), nameof(EstadoConfirmacionCarga), nameof(IndicadorJornada), nameof(IndicadorSincronizacion), nameof(MostrarIndicadorSincronizacion), nameof(EstadoMapa), nameof(Progreso), nameof(IncidenciasCierre) }) Cambiar(propiedad);
         Iniciar?.Actualizar(); RetomarJornada?.Actualizar(); Escanear?.Actualizar(); ConfirmarCarga?.Actualizar(); Sincronizar?.Actualizar(); Rendir?.Actualizar(); Finalizar?.Actualizar();
     }
     private void Cambiar([CallerMemberName] string? nombre = null) => PropertyChanged?.Invoke(this, new(nombre));
