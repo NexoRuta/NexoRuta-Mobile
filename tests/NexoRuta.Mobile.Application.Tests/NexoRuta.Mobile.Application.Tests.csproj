@@ -7,4 +7,13 @@
     <Using Include="Xunit" />
     <ProjectReference Include="../../src/NexoRuta.Mobile.Application/NexoRuta.Mobile.Application.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Using Include="System.Collections.ObjectModel" />
+    <Compile Include="../../src/NexoRuta.Mobile/Presentacion/HojaRutaViewModel.cs" Link="Presentation/HojaRutaViewModel.cs" />
+    <Compile Include="../../src/NexoRuta.Mobile/Presentacion/EntregaViewModel.cs" Link="Presentation/EntregaViewModel.cs" />
+    <Compile Include="../../src/NexoRuta.Mobile/Presentacion/ComandoAsincrono.cs" Link="Presentation/ComandoAsincrono.cs" />
+    <Compile Include="../../src/NexoRuta.Mobile/Presentacion/ParadaResumen.cs" Link="Presentation/ParadaResumen.cs" />
+    <Compile Include="../../src/NexoRuta.Mobile/Captura/IInteraccionReparto.cs" Link="Presentation/IInteraccionReparto.cs" />
+    <Compile Include="../../src/NexoRuta.Mobile/Ubicacion/ITrackingJornada.cs" Link="Presentation/ITrackingJornada.cs" />
+  </ItemGroup>
 </Project>

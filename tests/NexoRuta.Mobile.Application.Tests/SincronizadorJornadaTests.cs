@@ -8,8 +8,48 @@ using NexoRuta.Mobile.Core.Rutas;
 using NexoRuta.Mobile.Storage;
 namespace NexoRuta.Mobile.Application.Tests;
 
-public sealed class SincronizadorJornadaTests
+public sealed partial class SincronizadorJornadaTests
 {
+    [Fact]
+    public async Task CancelledRefreshPreservesOriginalClosureAndRetriesIdenticalEnvelopeWithoutDuplicateReceipts()
+    {
+        using var f = new Escenario(); await f.Preparar();
+        var original = (await f.Datos.LeerAsync(f.Cuenta, f.Jornada.Id))!;
+        var closure = original.Operaciones.Single(o => o.Tipo == TipoOperacionLocal.FinJornada);
+        var blocked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var envelopes = new Dictionary<Guid, byte[]>();
+        var applied = new HashSet<Guid>();
+        var hold = true;
+        using var cliente = f.Cliente(async (request, ct) =>
+        {
+            var bytes = await request.Content!.ReadAsByteArrayAsync(ct);
+            var command = JsonSerializer.Deserialize(bytes, ContratosRepartoJson.Default.SobreOperacion)!;
+            if (envelopes.TryGetValue(command.Id, out var saved)) Assert.Equal(saved, bytes);
+            else envelopes.Add(command.Id, bytes);
+            if (hold && command.Secuencia == 3)
+            {
+                blocked.TrySetResult();
+                await Task.Delay(Timeout.Infinite, ct);
+            }
+            Assert.True(applied.Add(command.Id));
+            return Confirmar(command, f.Envio);
+        });
+        using var sync = new SincronizadorJornada(cliente, f.Datos, f.Archivos);
+        using var timeout = new CancellationTokenSource();
+        var refresh = sync.SincronizarAsync(f.Cuenta, f.Jornada.Id, timeout.Token);
+        await blocked.Task.WaitAsync(TimeSpan.FromSeconds(5)); timeout.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => refresh);
+        var pending = (await f.Datos.LeerAsync(f.Cuenta, f.Jornada.Id))!;
+        Assert.True(pending.TienePendientes);
+        Assert.Equal(closure.Id, pending.Operaciones.Single(o => o.Tipo == TipoOperacionLocal.FinJornada).Id);
+        Assert.DoesNotContain(closure.Id, applied);
+        hold = false;
+        await Task.WhenAll(sync.SincronizarAsync(f.Cuenta, f.Jornada.Id), sync.SincronizarAsync(f.Cuenta, f.Jornada.Id));
+        Assert.Equal(original.Operaciones.Count, applied.Count);
+        Assert.Equal(original.Operaciones.Count, (await f.Datos.LeerConfirmacionesAsync(f.Cuenta, f.Jornada.Id)).Count);
+        Assert.False((await f.Datos.LeerAsync(f.Cuenta, f.Jornada.Id))!.TienePendientes);
+    }
+
     [Fact]
     public async Task ReconexionProcesaMasDeUnLoteYElCierreSinNecesitarGpsActivo()
     {
@@ -198,16 +238,19 @@ public sealed class SincronizadorJornadaTests
             Datos = new(Raiz + "/sql", Claves); Archivos = new(Raiz + "/evidencias", Claves);
             Jornada = JornadaLocal.Iniciar(Guid.NewGuid(), Guid.NewGuid(), Cuenta, DateTimeOffset.UtcNow);
         }
-        internal async Task Preparar(bool conFoto = false, bool cerrar = true)
+        internal async Task Preparar(bool conFoto = false, bool cerrar = true, bool soloInicio = false, string estadoServidor = "Despachada", bool bloquearDiscrepanciasCarga = false)
         {
-            Jornada.RegistrarCarga(Envio, Elemento($"{{\"bultoId\":\"{Bulto}\"}}"), DateTimeOffset.UtcNow);
-            Jornada.ConfirmarCarga(DateTimeOffset.UtcNow);
-            if (conFoto) await Archivos.GuardarAsync(Cuenta, FotoId, Foto);
-            Jornada.RegistrarEntregaFisica(Envio, Elemento(conFoto ? $"{{\"fotoId\":\"{FotoId}\"}}" : "{}"), DateTimeOffset.UtcNow);
+            if (!soloInicio)
+            {
+                Jornada.RegistrarCarga(Envio, Elemento($"{{\"bultoId\":\"{Bulto}\"}}"), DateTimeOffset.UtcNow);
+                Jornada.ConfirmarCarga(DateTimeOffset.UtcNow);
+                if (conFoto) await Archivos.GuardarAsync(Cuenta, FotoId, Foto);
+                Jornada.RegistrarEntregaFisica(Envio, Elemento(conFoto ? $"{{\"fotoId\":\"{FotoId}\"}}" : "{}"), DateTimeOffset.UtcNow);
+            }
             if (cerrar) Jornada.Finalizar(DateTimeOffset.UtcNow);
             var hoja = new HojaRuta { Id = Jornada.RutaId, JornadaId = Jornada.Id, RepartidorAccesoId = Cuenta.AccesoId,
-                VehiculoId = Guid.NewGuid(), Fecha = DateOnly.FromDateTime(DateTime.Today), Estado = "Despachada", Version = 1,
-                Politica = new() { Version = 1, ZonaHoraria = "America/Montevideo" },
+                VehiculoId = Guid.NewGuid(), Fecha = DateOnly.FromDateTime(DateTime.Today), Estado = estadoServidor, Version = 1,
+                Politica = new() { Version = 1, ZonaHoraria = "America/Montevideo", BloquearDiscrepanciasCarga = bloquearDiscrepanciasCarga },
                 Paradas = [new() { Reglas = new() { VersionId = Guid.NewGuid(), NumeroVersion = 1, MaximoIntentos = 3,
                 IntervaloEntreIntentosMinutos = 1, PoliticaDevolucionAlAgotarIntentos = "DecisionOperativa",
                 RequiereFoto = true, RequiereNombre = true, Motivos = [new("AUSENTE", "Ausente")] }, EnvioId = Envio, Orden = 1, Activa = true, EnvioVersion = 2, Direccion = "Dirección de prueba",

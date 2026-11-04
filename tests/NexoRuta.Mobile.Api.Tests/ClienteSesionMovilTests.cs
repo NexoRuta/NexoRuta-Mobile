@@ -16,6 +16,27 @@ public sealed partial class ClienteSesionMovilTests
     private static readonly string Refresh = new('a', 43);
     private static readonly string SiguienteRefresh = new('b', 43);
 
+#if DEBUG
+    [Theory]
+    [InlineData(HttpStatusCode.OK)]
+    [InlineData(HttpStatusCode.ServiceUnavailable)]
+    public async Task HealthProbeUsesConfiguredTransportWithoutCredentialsOrSessionChanges(HttpStatusCode status)
+    {
+        var almacen = ConSesion(expirado: true);
+        var original = almacen.Estado;
+        using var cliente = Crear(almacen, (request, ct) =>
+        {
+            Assert.Equal(new Uri(Api, "health/ready"), request.RequestUri);
+            Assert.Equal(HttpMethod.Get, request.Method);
+            Assert.Null(request.Headers.Authorization);
+            Assert.Null(request.Content);
+            return Task.FromResult(new HttpResponseMessage(status));
+        });
+        Assert.Equal(status, await cliente.ComprobarConexionAsync());
+        Assert.Same(original, almacen.Estado);
+    }
+#endif
+
     [Theory]
     [InlineData("http://api.nexoruta.test/")]
     [InlineData("https://usuario:clave@api.nexoruta.test/")]
