@@ -25,4 +25,25 @@ public sealed class VistaHojaTests
         Assert.Equal("Despachada", VistaHoja.Crear(original, null).Estado);
         Assert.Throws<InvalidDataException>(() => VistaHoja.Crear(original, new HojaRuta { Id = Guid.NewGuid() }));
     }
+
+    [Fact]
+    public void ConteoDeLaListaUsaLaSuspensionDeLaVersionRemotaVigente()
+    {
+        var id = Guid.NewGuid(); var envio = Guid.NewGuid();
+        var original = new HojaRuta
+        {
+            Id = id, Version = 2,
+            Paradas = [new ParadaRuta { EnvioId = envio, Activa = true, EnvioVersion = 2 }]
+        };
+        var remota = new HojaRuta
+        {
+            Id = id, Version = 3, Estado = "EnCurso",
+            Paradas = [new ParadaRuta { EnvioId = envio, Activa = false, EnvioVersion = 3,
+                MotivoSuspension = "Carga incompleta" }]
+        };
+
+        Assert.Equal("0 activas · 1 fuera de ruta", VistaHoja.Crear(original, remota).Paradas);
+        Assert.Equal("0 bultos", VistaHoja.Crear(original, remota).Bultos);
+        Assert.Equal("EnCurso", VistaHoja.Crear(original, remota).Estado);
+    }
 }

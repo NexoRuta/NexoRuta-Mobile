@@ -98,6 +98,28 @@ public sealed partial class ClienteSesionMovilTests
     }
 
     [Fact]
+    public async Task SalidaSinTokensIndicaReingresoSeguroYNoIntentaLaRed()
+    {
+        var almacen = ConSesion();
+        var anterior = almacen.Estado!;
+        almacen.Estado = new EstadoSesionMovil { Api = anterior.Api, Cuenta = anterior.Cuenta };
+        var llamadas = 0;
+        using var cliente = Crear(almacen, (_, _) =>
+        {
+            llamadas++;
+            throw new Xunit.Sdk.XunitException("No se debe enviar una petición sin credenciales vigentes.");
+        });
+
+        var error = await ErrorAsync(ErrorSesionMovil.ReautenticarParaCerrarSesion,
+            () => cliente.CerrarSesionAsync(Cuenta, null));
+
+        Assert.Contains("cerrar la sesión", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("datos locales", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, llamadas);
+        Assert.Equal(Cuenta, await cliente.ObtenerCuentaLocalAsync());
+    }
+
+    [Fact]
     public async Task SalidaDeCuentaDistintaNoEnviaNada()
     {
         var almacen = ConSesion();

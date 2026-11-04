@@ -9,10 +9,10 @@ public partial class HojaRutaPage : ContentPage
     private readonly IServiceProvider servicios;
     private readonly SincronizacionConectividad? sincronizacion;
     private bool preparada;
-    public HojaRutaPage(HojaRuta hoja, CuentaMovil cuenta, IServiceProvider servicios)
+    public HojaRutaPage(HojaRuta hoja, CuentaMovil cuenta, IServiceProvider servicios, Func<HojaRuta, Task>? retomar = null)
     {
         InitializeComponent(); this.servicios = servicios;
-        modelo = ActivatorUtilities.CreateInstance<HojaRutaViewModel>(servicios, hoja, cuenta); BindingContext = modelo;
+        modelo = ActivatorUtilities.CreateInstance<HojaRutaViewModel>(servicios, hoja, cuenta); modelo.ConfigurarRetomar(retomar); BindingContext = modelo;
         sincronizacion = servicios.GetService<SincronizacionConectividad>();
     }
     public async Task PrepararAsync()
@@ -38,10 +38,10 @@ public partial class HojaRutaPage : ContentPage
     private async void PrepararMapa(object? sender, EventArgs e)
     {
         if (modelo.Ocupado) return;
-        var parada = modelo.Hoja.Paradas.OrderBy(p => p.Orden).First();
+        var paradas = modelo.Hoja.Paradas.Where(modelo.ParadaActiva).OrderBy(p => p.Orden).ToArray();
         await Navigation.PushAsync(new Mapas.MapaDestinoPage(servicios.GetRequiredService<Mapas.IProveedorMapas>().Crear(),
             servicios.GetRequiredService<NexoRuta.Mobile.Application.Mapas.ServicioPreparacionMapa>(),
-            modelo.Cuenta, modelo.Hoja, parada));
+            modelo.Cuenta, modelo.Hoja, paradas));
     }
     private async void AbrirParada(object? sender, SelectionChangedEventArgs e)
     {

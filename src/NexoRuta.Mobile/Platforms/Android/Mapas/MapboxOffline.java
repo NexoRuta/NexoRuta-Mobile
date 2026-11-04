@@ -56,7 +56,7 @@ public final class MapboxOffline {
                     result -> {
                         if (result.isValue()) job.style(result.getValue().getCompletedResourceCount(),
                             result.getValue().getRequiredResourceCount(), result.getValue().getCompletedResourceSize(), true);
-                        else job.fail();
+                        else job.fail("style_pack:" + result.getError().getType().toString());
                     });
                 job.setStyleTask(styleTask);
             });
@@ -73,10 +73,10 @@ public final class MapboxOffline {
                 result -> {
                     if (result.isValue()) job.tiles(result.getValue().getCompletedResourceCount(),
                         result.getValue().getRequiredResourceCount(), result.getValue().getCompletedResourceSize(), true);
-                    else job.fail();
+                    else job.fail("tile_region:" + result.getError().getType().toString());
                 });
             job.setTileTask(tileTask);
-        } catch (RuntimeException error) { job.fail(); throw error; }
+        } catch (RuntimeException error) { job.fail("sdk_exception:" + error.getClass().getSimpleName()); throw error; }
     }
     public static String progress(String id) {
         Job job = jobs.get(id);
@@ -103,13 +103,13 @@ public final class MapboxOffline {
         ready();
         if (Looper.myLooper() == Looper.getMainLooper()) throw new IllegalStateException("Query must run off the UI thread");
         CountDownLatch finished = new CountDownLatch(2);
-        final long[] sizes = new long[2]; final boolean[] complete = new boolean[2];
+        final long[] sizes = new long[2]; final boolean[] complete = new boolean[2]; final String[] errors = new String[2];
         store.getTileRegion(id, result -> {
             if (result.isValue()) {
                 complete[0] = result.getValue().getRequiredResourceCount() > 0
                     && result.getValue().getCompletedResourceCount() >= result.getValue().getRequiredResourceCount();
                 sizes[0] = result.getValue().getCompletedResourceSize();
-            }
+            } else errors[0] = "tile_region:" + result.getError().getType().toString();
             finished.countDown();
         });
         manager.getStylePack(style, result -> {
@@ -117,20 +117,25 @@ public final class MapboxOffline {
                 complete[1] = result.getValue().getRequiredResourceCount() > 0
                     && result.getValue().getCompletedResourceCount() >= result.getValue().getRequiredResourceCount();
                 sizes[1] = result.getValue().getCompletedResourceSize();
-            }
+            } else errors[1] = "style_pack:" + result.getError().getType().toString();
             finished.countDown();
         });
-        if (!finished.await(10, TimeUnit.SECONDS)) return status("unverified", 0, 0, false);
+        if (!finished.await(10, TimeUnit.SECONDS)) return status("unverified", 0, 0, false, "inspect_timeout");
         boolean all = complete[0] && complete[1];
-        return status(all ? "complete" : "missing", sizes[0] + sizes[1], all ? 1 : 0, all);
+        String error = errors[0] != null ? errors[0] : errors[1];
+        return status(all ? "complete" : "missing", sizes[0] + sizes[1], all ? 1 : 0, all, error);
     }
     private static String status(String phase, long bytes, double fraction, boolean complete) {
+        return status(phase, bytes, fraction, complete, null);
+    }
+    private static String status(String phase, long bytes, double fraction, boolean complete, String error) {
         try { return new JSONObject().put("phase", phase).put("bytes", Math.max(0, bytes))
-            .put("fraction", Math.max(0, Math.min(1, fraction))).put("complete", complete).toString(); }
-        catch (org.json.JSONException error) { throw new IllegalStateException("Invalid map status"); }
+            .put("fraction", Math.max(0, Math.min(1, fraction))).put("complete", complete).put("error", error).toString(); }
+        catch (org.json.JSONException jsonError) { throw new IllegalStateException("Invalid map status"); }
     }
     private static final class Job {
         private String phase = "running";
+        private String error;
         private long styleCount, styleRequired, styleBytes, tileCount, tileRequired, tileBytes;
         private boolean styleDone, tilesDone;
         private Cancelable styleTask, tileTask;
@@ -146,7 +151,7 @@ public final class MapboxOffline {
             tileCount = count; tileRequired = required; tileBytes = bytes; tilesDone = done; finish();
         }
         private void finish() { if (styleDone && tilesDone) phase = "complete"; }
-        void fail() { stop("failed"); }
+        void fail(String reason) { synchronized(this) { error = reason; } stop("failed"); }
         void cancel() { stop("cancelled"); }
         private void stop(String reason) {
             Cancelable style, tiles;
@@ -156,7 +161,7 @@ public final class MapboxOffline {
         synchronized String json() {
             double fraction = ((styleRequired > 0 ? (double) styleCount / styleRequired : 0)
                 + (tileRequired > 0 ? (double) tileCount / tileRequired : 0)) / 2;
-            return status(phase, styleBytes + tileBytes, phase.equals("complete") ? 1 : fraction, phase.equals("complete"));
+            return status(phase, styleBytes + tileBytes, phase.equals("complete") ? 1 : fraction, phase.equals("complete"), error);
         }
     }
 }

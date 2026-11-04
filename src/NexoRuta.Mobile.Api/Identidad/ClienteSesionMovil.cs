@@ -14,10 +14,11 @@ public sealed partial class ClienteSesionMovil : IDisposable
     private readonly Uri api;
     private readonly IAlmacenSesionMovil almacen;
     private readonly TimeProvider reloj;
+    private readonly Action<string>? registrarDiagnostico;
     private readonly SemaphoreSlim exclusividad = new(1, 1);
 
     public ClienteSesionMovil(Uri api, IAlmacenSesionMovil almacen,
-        HttpMessageHandler? transporte = null, TimeProvider? reloj = null)
+        HttpMessageHandler? transporte = null, TimeProvider? reloj = null, Action<string>? registrarDiagnostico = null)
     {
         if (!api.IsAbsoluteUri || api.Scheme != Uri.UriSchemeHttps || api.UserInfo.Length != 0
             || api.Query.Length != 0 || api.Fragment.Length != 0 || api.AbsolutePath != "/")
@@ -25,6 +26,7 @@ public sealed partial class ClienteSesionMovil : IDisposable
         this.api = api;
         this.almacen = almacen;
         this.reloj = reloj ?? TimeProvider.System;
+        this.registrarDiagnostico = registrarDiagnostico;
         http = new HttpClient(transporte ?? new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false })
         {
             Timeout = TimeSpan.FromSeconds(30),
@@ -40,7 +42,11 @@ public sealed partial class ClienteSesionMovil : IDisposable
         finally { exclusividad.Release(); }
     }
 
-    public async Task<CuentaMovil> IngresarAsync(string email, string password, CancellationToken ct = default)
+    public Task<CuentaMovil> IngresarAsync(string email, string password, CancellationToken ct = default) =>
+        IngresarAsync(email, password, permitirCambioIdentidadEnMismoOperador: false, ct);
+
+    public async Task<CuentaMovil> IngresarAsync(string email, string password,
+        bool permitirCambioIdentidadEnMismoOperador, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(email);
         ArgumentException.ThrowIfNullOrWhiteSpace(password);
@@ -48,27 +54,62 @@ public sealed partial class ClienteSesionMovil : IDisposable
         try
         {
             var anterior = await LeerAsync();
-            using var respuesta = await PostAsync("api/auth/mobile/login",
-                new IngresoRequest { Email = email.Trim(), Password = password },
-                ContratosSesionJson.Default.IngresoRequest, ct);
-            ExigirExito(respuesta, ErrorSesionMovil.CredencialesRechazadas);
-            var tokens = await LeerTokensAsync(respuesta, ct);
-            CuentaMovil cuenta;
+            HttpResponseMessage respuesta;
             try
             {
-                using var contexto = await GetAsync("api/usuarios/actual", tokens, ct);
-                ExigirExito(contexto);
-                cuenta = (await LeerJsonAsync(contexto, ContratosSesionJson.Default.UsuarioActualResponse, ct)).ObtenerCuenta();
-                if (anterior is not null && anterior.Cuenta != cuenta)
-                    throw new SesionMovilException(ErrorSesionMovil.CuentaDiferente);
-                await almacen.GuardarAsync(new() { Api = api.AbsoluteUri, Cuenta = cuenta, Tokens = tokens });
+                respuesta = await PostAsync("api/auth/mobile/login",
+                    new IngresoRequest { Email = email.Trim(), Password = password },
+                    ContratosSesionJson.Default.IngresoRequest, ct);
             }
-            catch
+            catch (HttpRequestException)
             {
-                await RevocarNuevaSesionAsync(tokens);
+                RegistrarDiagnostico("auth.login.transport_error=HttpRequestException");
                 throw;
             }
-            return cuenta;
+            catch (OperationCanceledException)
+            {
+                RegistrarDiagnostico("auth.login.cancelled_or_timed_out");
+                throw;
+            }
+            using (respuesta)
+            {
+                RegistrarDiagnostico($"auth.login.response.status={(int)respuesta.StatusCode}");
+                ExigirExito(respuesta, ErrorSesionMovil.CredencialesRechazadas);
+                var tokens = await LeerTokensAsync(respuesta, ct);
+                CuentaMovil cuenta;
+                try
+                {
+                    using var contexto = await GetAsync("api/usuarios/actual", tokens, ct);
+                    ExigirExito(contexto);
+                    cuenta = (await LeerJsonAsync(contexto, ContratosSesionJson.Default.UsuarioActualResponse, ct)).ObtenerCuenta();
+                    var mismoUsuario = anterior is null || anterior.Cuenta.UsuarioId == cuenta.UsuarioId;
+                    var mismoAcceso = anterior is null || anterior.Cuenta.AccesoId == cuenta.AccesoId;
+                    var mismoOperador = anterior is null || anterior.Cuenta.OperadorId == cuenta.OperadorId;
+                    RegistrarDiagnostico($"session.login.user_matches={mismoUsuario.ToString().ToLowerInvariant()}");
+                    RegistrarDiagnostico($"session.login.access_matches={mismoAcceso.ToString().ToLowerInvariant()}");
+                    RegistrarDiagnostico($"session.login.operator_matches={mismoOperador.ToString().ToLowerInvariant()}");
+                    var mismaIdentidad = mismoUsuario && mismoAcceso && mismoOperador;
+                    RegistrarDiagnostico($"session.login.identity_matches={mismaIdentidad.ToString().ToLowerInvariant()}");
+                    var cambioPermitido = !mismaIdentidad && permitirCambioIdentidadEnMismoOperador && mismoOperador;
+                    RegistrarDiagnostico($"session.login.identity_change_allowed={cambioPermitido.ToString().ToLowerInvariant()}");
+                    if (!mismaIdentidad && !cambioPermitido)
+                        throw new SesionMovilException(ErrorSesionMovil.CuentaDiferente);
+                    if (cambioPermitido)
+                    {
+                        await ValidarPerfilNuevoAsync(cuenta, tokens, ct);
+                        RegistrarDiagnostico("session.login.identity_replaced=true");
+                    }
+                    await almacen.GuardarAsync(new() { Api = api.AbsoluteUri, Cuenta = cuenta, Tokens = tokens });
+                    RegistrarDiagnostico("session.login.persisted=true");
+                }
+                catch (Exception ex)
+                {
+                    RegistrarDiagnostico($"session.login.followup_failure={ex.GetType().Name}");
+                    await RevocarNuevaSesionAsync(tokens);
+                    throw;
+                }
+                return cuenta;
+            }
         }
         finally { exclusividad.Release(); }
     }
@@ -110,9 +151,14 @@ public sealed partial class ClienteSesionMovil : IDisposable
 
     private async Task<EstadoSesionMovil> AsegurarTokenAsync(EstadoSesionMovil estado, bool forzar, CancellationToken ct)
     {
-        var tokens = estado.Tokens ?? throw new SesionMovilException(ErrorSesionMovil.ReingresoNecesario);
+        if (estado.Tokens is not { } tokens)
+        {
+            RegistrarDiagnostico("session.reauth reason=no_local_tokens");
+            throw new SesionMovilException(ErrorSesionMovil.ReingresoNecesario);
+        }
         if (tokens.RefreshExpiresAtUtc <= reloj.GetUtcNow())
         {
+            RegistrarDiagnostico("session.reauth reason=refresh_expired");
             await InvalidarAsync(estado);
             throw new SesionMovilException(ErrorSesionMovil.ReingresoNecesario);
         }
@@ -120,10 +166,12 @@ public sealed partial class ClienteSesionMovil : IDisposable
         ct.ThrowIfCancellationRequested();
         // Antes de enviar: un cierre o respuesta perdida nunca permite reutilizar el refresh anterior.
         await InvalidarAsync(estado);
+        RegistrarDiagnostico("session.refresh.request");
         try
         {
             using var respuesta = await PostAsync("api/auth/mobile/refresh",
                 new RenovacionRequest { RefreshToken = tokens.RefreshToken }, ContratosSesionJson.Default.RenovacionRequest, ct);
+            RegistrarDiagnostico($"session.refresh.response.status={(int)respuesta.StatusCode}");
             ExigirExito(respuesta);
             var nuevos = await LeerTokensAsync(respuesta, ct);
             if (nuevos.SesionId != tokens.SesionId || nuevos.RefreshExpiresAtUtc != tokens.RefreshExpiresAtUtc
@@ -135,6 +183,7 @@ public sealed partial class ClienteSesionMovil : IDisposable
         }
         catch (HttpRequestException)
         {
+            RegistrarDiagnostico("session.refresh.transport_error=HttpRequestException");
             throw new SesionMovilException(ErrorSesionMovil.ReingresoNecesario);
         }
     }
@@ -149,7 +198,38 @@ public sealed partial class ClienteSesionMovil : IDisposable
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(api, ruta));
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tokens.AccessToken);
-        return await http.SendAsync(request, ct);
+        var operacion = EtiquetaOperacion(ruta);
+        try
+        {
+            var respuesta = await http.SendAsync(request, ct);
+            RegistrarDiagnostico($"api.{operacion}.response.status={(int)respuesta.StatusCode}");
+            return respuesta;
+        }
+        catch (HttpRequestException)
+        {
+            RegistrarDiagnostico($"api.{operacion}.transport_error=HttpRequestException");
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            RegistrarDiagnostico($"api.{operacion}.cancelled_or_timed_out");
+            throw;
+        }
+    }
+
+    private static string EtiquetaOperacion(string ruta) => ruta switch
+    {
+        var value when value.StartsWith("api/mobile/rutas?", StringComparison.Ordinal) => "mobile_routes",
+        "api/mobile/perfil" => "mobile_profile",
+        "api/usuarios/actual" => "current_user",
+        "api/usuarios/actual/permisos" => "permissions",
+        _ => "authenticated_request"
+    };
+
+    private void RegistrarDiagnostico(string evento)
+    {
+        try { registrarDiagnostico?.Invoke(evento); }
+        catch (Exception) { /* Diagnostic logging must never change the session result. */ }
     }
 
     private async Task<TokensSesionMovil> LeerTokensAsync(HttpResponseMessage respuesta, CancellationToken ct)

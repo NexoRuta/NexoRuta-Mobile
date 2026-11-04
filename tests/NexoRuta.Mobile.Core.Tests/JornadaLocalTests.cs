@@ -65,6 +65,31 @@ public sealed class JornadaLocalTests
     }
 
     [Fact]
+    public void ReintentoDeInicioConservaElComandoRechazadoYAgregaUnaUnicaSecuencia()
+    {
+        var jornada = NuevaJornada();
+        var original = Assert.Single(jornada.Operaciones);
+
+        Assert.Throws<InvalidOperationException>(() => jornada.ReintentarInicio(original.Id, "Aplicada", Inicio.AddHours(1)));
+        jornada.ConfirmarPersistencia(original.Id);
+        Assert.Throws<InvalidOperationException>(() => jornada.ReintentarInicio(original.Id, "Aplicada", Inicio.AddHours(1)));
+
+        var reintento = jornada.ReintentarInicio(original.Id, "Conflicto", Inicio.AddHours(1));
+
+        Assert.NotEqual(original.Id, reintento.Id);
+        Assert.Equal(2, reintento.Secuencia);
+        Assert.Equal(TipoOperacionLocal.InicioJornada, reintento.Tipo);
+        Assert.Equal(original, jornada.Operaciones[0]);
+        Assert.Equal(reintento, Assert.Single(jornada.PrepararEnvio()));
+        Assert.Throws<InvalidOperationException>(() => jornada.ReintentarInicio(original.Id, "Conflicto", Inicio.AddHours(2)));
+
+        var restaurada = JornadaLocal.Restaurar(jornada.ExportarEstado(), Cuenta);
+        Assert.Equal(new[] { 1L, 2L }, restaurada.Operaciones.Select(x => x.Secuencia));
+        Assert.Equal(original.Id, restaurada.Operaciones[0].Id);
+        Assert.Equal(reintento.Id, restaurada.Operaciones[1].Id);
+    }
+
+    [Fact]
     public void PruebaCompletadaAntesDelCierreSobreviveReinicioYSincronizacionTardia()
     {
         var jornada = NuevaJornada();

@@ -14,6 +14,7 @@ public sealed class JornadaLocal
     public CuentaMovil Cuenta { get; }
     public bool EstaCerrada => operaciones[^1].Tipo == TipoOperacionLocal.FinJornada;
     public bool TienePendientes => operaciones.Any(x => !confirmadas.Contains(x.Id));
+    public int CantidadPendientes => operaciones.Count(x => !confirmadas.Contains(x.Id));
     public IReadOnlyList<OperacionLocal> Operaciones => operaciones.AsReadOnly();
 
     private JornadaLocal(Guid id, Guid rutaId, CuentaMovil cuenta,
@@ -35,6 +36,16 @@ public sealed class JornadaLocal
         var inicio = new OperacionLocal(Guid.CreateVersion7(), 1, TipoOperacionLocal.InicioJornada,
             null, instante, DatosVacios());
         return new JornadaLocal(id, rutaId, cuenta, [inicio], []);
+    }
+
+    public OperacionLocal ReintentarInicio(Guid inicioRechazadoId, string resultadoOriginal, DateTimeOffset instante)
+    {
+        if (operaciones.Count != 1 || operaciones[0].Tipo != TipoOperacionLocal.InicioJornada
+            || operaciones[0].Id != inicioRechazadoId || !confirmadas.Contains(inicioRechazadoId)
+            || resultadoOriginal != "Conflicto")
+            throw new InvalidOperationException("Solo se puede reintentar un inicio rechazado y confirmado, una vez.");
+
+        return Agregar(TipoOperacionLocal.InicioJornada, null, DatosVacios(), instante);
     }
 
     public OperacionLocal RegistrarEntregaFisica(Guid envioId, JsonElement datos, DateTimeOffset instante)
@@ -101,8 +112,11 @@ public sealed class JornadaLocal
         for (var i = 0; i < estado.Operaciones.Count; i++)
         {
             var operacion = estado.Operaciones[i];
+            var esReintentoDeInicio = i == 1 && operacion?.Tipo == TipoOperacionLocal.InicioJornada
+                && estado.Confirmadas.Contains(estado.Operaciones[0].Id);
             if (operacion is null || !ids.Add(operacion.Id) || operacion.Secuencia != i + 1L
-                || (i == 0) != (operacion.Tipo == TipoOperacionLocal.InicioJornada)
+                || (i == 0 && operacion.Tipo != TipoOperacionLocal.InicioJornada)
+                || (i > 0 && operacion.Tipo == TipoOperacionLocal.InicioJornada && !esReintentoDeInicio)
                 || (operacion.Tipo == TipoOperacionLocal.FinJornada && i != estado.Operaciones.Count - 1))
                 throw new InvalidDataException("El registro local no tiene una secuencia válida.");
         }

@@ -21,9 +21,15 @@ public static class MauiProgram
 		var builder = MauiApp.CreateBuilder();
         var configuracion = new ConfiguracionAplicacion();
         builder.Services.AddSingleton(configuracion);
+#if ANDROID && DEBUG
+        Action<string>? registrarDiagnostico = mensaje => Android.Util.Log.Info("NexoRuta.Session", mensaje);
+#else
+        Action<string>? registrarDiagnostico = null;
+#endif
         if (configuracion.Api is { } api)
         {
-            builder.Services.AddSingleton(s => new ClienteSesionMovil(api, s.GetRequiredService<IAlmacenSesionMovil>()));
+            builder.Services.AddSingleton(s => new ClienteSesionMovil(api, s.GetRequiredService<IAlmacenSesionMovil>(),
+                registrarDiagnostico: registrarDiagnostico));
             builder.Services.AddSingleton<NexoRuta.Mobile.Application.SincronizadorJornada>();
             builder.Services.AddSingleton<NexoRuta.Mobile.Application.ServicioAvisosReparto>();
             builder.Services.AddSingleton<NexoRuta.Mobile.Application.ServicioSesionTrabajo>();

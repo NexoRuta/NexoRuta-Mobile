@@ -11,6 +11,6 @@ public interface IProveedorMapaOffline
     Task DescargarAsync(string regionId, ZonaMapa zona, IProgress<ProgresoMapa> progreso, CancellationToken ct);
     Task EliminarAsync(string regionId, CancellationToken ct);
 }
-public sealed record RecursosMapa(bool Completo, long Bytes);
+public sealed record RecursosMapa(bool Completo, long Bytes, string? Error = null);
 public sealed record ProgresoMapa(double Fraccion, long Bytes);
 public sealed record PreparacionMapa(bool Preparada, long Bytes, string Mensaje);

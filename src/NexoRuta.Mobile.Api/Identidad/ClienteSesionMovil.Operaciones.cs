@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -8,10 +10,24 @@ namespace NexoRuta.Mobile.Api.Identidad;
 
 public sealed partial class ClienteSesionMovil
 {
-    public async Task<ConfirmacionOperacion> EnviarOperacionAsync(CuentaMovil cuenta, Guid jornadaId, byte[] sobre, CancellationToken ct = default)
+    public async Task<ConfirmacionOperacion> EnviarOperacionAsync(
+        CuentaMovil cuenta, Guid jornadaId, byte[] sobre, Guid operacionId, int pendientes, CancellationToken ct = default)
     {
-        using var respuesta = await EnviarAutorizadoAsync(() => new(HttpMethod.Post, new Uri(api, $"api/mobile/jornadas/{jornadaId}/operaciones"))
-        { Content = new ByteArrayContent(sobre) { Headers = { ContentType = new MediaTypeHeaderValue("application/json") } } }, ct, cuenta);
+        if (operacionId == Guid.Empty || pendientes is < 0 or > 10_000)
+            throw new ArgumentOutOfRangeException(nameof(pendientes));
+
+        var sampled = operacionId.ToByteArray()[0] % 10 == 0 ? "01" : "00";
+        var traceParent = $"00-{operacionId:N}-{ActivitySpanId.CreateRandom()}-{sampled}";
+        using var respuesta = await EnviarAutorizadoAsync(() =>
+        {
+            var request = new HttpRequestMessage(HttpMethod.Post, new Uri(api, $"api/mobile/jornadas/{jornadaId}/operaciones"))
+            {
+                Content = new ByteArrayContent(sobre) { Headers = { ContentType = new MediaTypeHeaderValue("application/json") } }
+            };
+            request.Headers.TryAddWithoutValidation("traceparent", traceParent);
+            request.Headers.TryAddWithoutValidation("X-NexoRuta-Pending-Sync", pendientes.ToString(CultureInfo.InvariantCulture));
+            return request;
+        }, ct, cuenta);
         return await LeerJsonAsync(respuesta, ContratosRepartoJson.Default.ConfirmacionOperacion, ct);
     }
     public async Task SubirEvidenciaAsync(CuentaMovil cuenta, Guid jornadaId, Guid envioId, Guid archivoId, string tipo, byte[] contenido, CancellationToken ct = default)

@@ -10,6 +10,10 @@ public sealed class InteraccionReparto : IInteraccionReparto
     {
         var page = new RendicionPage(bultos); await Actual.Navigation.PushAsync(page); return await page.Resultado;
     }
+    public Task<bool> ConfirmarSalidaConDiferenciasAsync(int bultosPendientes, int paradasAfectadas) =>
+        Actual.DisplayAlertAsync("Confirmar salida con diferencias",
+            $"Faltan {bultosPendientes} bulto(s) por verificar en {paradasAfectadas} parada(s). Si continuás, esas paradas quedarán suspendidas y esos envíos no saldrán a reparto. El depósito deberá revisar la carga.",
+            "Confirmar salida", "Volver a la carga");
     public Task<bool> ConfirmarCierreAsync(bool pruebaPendiente, int bultosSinRendir) => Actual.DisplayAlertAsync("Terminar jornada",
         (bultosSinRendir > 0 ? $"Hay {bultosSinRendir} bulto(s) sin entrega ni rendición. Se registrará una incidencia y conservarás su custodia hasta la recepción física en depósito.\n\n" : "")
         + (pruebaPendiente ? "Hay entregas con prueba pendiente o sin validación confirmada. El servidor evaluará su prueba al recibir el cierre, después de sincronizar los registros anteriores."

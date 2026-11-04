@@ -24,7 +24,8 @@ public sealed class ProveedorMapbox(ConfiguracionAplicacion configuracion) : IPr
         ExigirConfiguracion();
         var estado = await Task.Run(() => Leer(MapboxOfflineAndroid.Inspect(regionId, Estilo)), ct);
         ct.ThrowIfCancellationRequested();
-        return new(estado.Complete, estado.Bytes);
+        if (!estado.Complete && estado.Error is { Length: > 0 } error) Android.Util.Log.Warn("NexoRuta.Mapbox", $"offline.inspect.failed code={error}");
+        return new(estado.Complete, estado.Bytes, estado.Error);
 #else
         await Task.CompletedTask;
         return new(false, 0);
@@ -45,7 +46,12 @@ public sealed class ProveedorMapbox(ConfiguracionAplicacion configuracion) : IPr
                 var estado = Leer(MapboxOfflineAndroid.Progress(regionId));
                 progreso.Report(new(estado.Fraction, estado.Bytes));
                 if (estado.Phase == "complete") return;
-                if (estado.Phase != "running") throw new IOException("No se completaron el estilo y las teselas. Verificá conexión y espacio disponible.");
+                if (estado.Phase != "running")
+                {
+                    var codigo = estado.Error ?? estado.Phase;
+                    Android.Util.Log.Warn("NexoRuta.Mapbox", $"offline.download.failed code={codigo}");
+                    throw new IOException(MensajeError(estado.Error, estado.Phase));
+                }
                 await Task.Delay(250, ct);
             }
         }
@@ -81,28 +87,49 @@ public sealed class ProveedorMapbox(ConfiguracionAplicacion configuracion) : IPr
             throw new InvalidDataException("El estado del mapa no es válido.");
         return estado;
     }
+    private static string MensajeError(string? codigo, string fase) => codigo switch
+    {
+        "style_pack:DISK_FULL" or "tile_region:DISK_FULL" => "Mapbox informó que falta espacio en el dispositivo.",
+        "style_pack:TILE_COUNT_EXCEEDED" or "tile_region:TILE_COUNT_EXCEEDED" => "La zona seleccionada supera el límite de recursos del mapa.",
+        "style_pack:CANCELED" or "tile_region:CANCELED" => "Mapbox canceló la preparación.",
+        "style_pack:DOES_NOT_EXIST" or "tile_region:DOES_NOT_EXIST" => "El estilo o la zona no están disponibles en la caché offline.",
+        "inspect_timeout" => "Mapbox no respondió a la verificación dentro del tiempo esperado.",
+        "sdk_exception:IllegalArgumentException" => "Mapbox rechazó la geometría, estilo o nivel de zoom solicitado.",
+        null when fase == "failed" => "Mapbox no completó el estilo y las teselas. Revisá la conexión y el espacio disponible.",
+        _ => "El SDK de Mapbox no confirmó todos los recursos del estilo y la zona. Revisá la conexión y el espacio disponible."
+    };
 #endif
     private sealed class MapaPendiente : IMapaDestino
     {
-        public View Vista { get; } = new Label { Text = "Mapa no configurado. La dirección está disponible; podés operar online.", Margin = 20, VerticalOptions = LayoutOptions.Center };
-        public void Mostrar(ParadaRuta parada) { }
+        public View Vista { get; } = new Label { Text = "Mapbox no está configurado para esta compilación. La dirección sigue disponible.", Margin = 20, VerticalOptions = LayoutOptions.Center };
+        public string EstadoInicial => "";
+        public event Action<string>? EstadoCambiado { add { } remove { } }
+        public void Mostrar(IReadOnlyCollection<ParadaRuta> paradas) { }
         public void Dispose() { }
     }
     private sealed class MapaMapbox : IMapaDestino
     {
-        private readonly MapView mapa = new() { StyleUri = MapStyles.Streets, ShowUserLocation = false };
+        private readonly MapView mapa = new() { StyleUri = MapStyles.Streets, ShowUserLocation = false, FitBoundsPadding = 56 };
+        public string EstadoInicial => "Cargando mapa online…";
+        public event Action<string>? EstadoCambiado;
+        public MapaMapbox() => mapa.StyleLoaded += (_, _) => EstadoCambiado?.Invoke("listo");
         public View Vista => mapa;
-        public void Mostrar(ParadaRuta parada)
+        public void Mostrar(IReadOnlyCollection<ParadaRuta> paradas)
         {
             mapa.Annotations.Clear();
-            mapa.Annotations.Add(new MapAnnotation { Latitude = parada.Latitud, Longitude = parada.Longitud, Title = parada.Direccion, Color = "#0D6EFD" });
-            mapa.Camera = new MapCameraPosition(parada.Latitud, parada.Longitud, zoom: 14);
+            var ubicadas = paradas.Where(p => double.IsFinite(p.Latitud) && p.Latitud is >= -90 and <= 90
+                && double.IsFinite(p.Longitud) && p.Longitud is >= -180 and <= 180).OrderBy(p => p.Orden).ToArray();
+            foreach (var parada in ubicadas)
+                mapa.Annotations.Add(new MapAnnotation { Id = parada.EnvioId.ToString("N"), Latitude = parada.Latitud,
+                    Longitude = parada.Longitud, Title = parada.Titulo, Color = "#0D6EFD" });
+            if (ubicadas.Length == 1) mapa.Camera = new MapCameraPosition(ubicadas[0].Latitud, ubicadas[0].Longitud, zoom: 14);
+            else if (ubicadas.Length > 1) mapa.FitBoundsToContent();
         }
         public void Dispose() => mapa.Handler?.DisconnectHandler();
     }
 }
 #if ANDROID
-internal sealed record EstadoNativo(string Phase, long Bytes, double Fraction, bool Complete);
+internal sealed record EstadoNativo(string Phase, long Bytes, double Fraction, bool Complete, string? Error);
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(EstadoNativo))]
 internal partial class MapboxEstadoJson : JsonSerializerContext;

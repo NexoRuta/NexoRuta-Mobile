@@ -11,32 +11,46 @@ public sealed class ServicioPreparacionMapa(RepositorioJornadasSqlite datos, IPr
 {
     private readonly SemaphoreSlim acceso = new(1, 1);
     public bool Disponible => proveedor.Disponible;
-    public async Task<PreparacionMapa> ConsultarAsync(CuentaMovil cuenta, HojaRuta hoja, CancellationToken ct = default)
+    public Task<PreparacionMapa> ConsultarAsync(CuentaMovil cuenta, HojaRuta hoja, CancellationToken ct = default) =>
+        ConsultarAsync(cuenta, hoja, hoja.Paradas, ct);
+
+    public async Task<PreparacionMapa> ConsultarAsync(CuentaMovil cuenta, HojaRuta hoja,
+        IReadOnlyCollection<ParadaRuta> paradas, CancellationToken ct = default)
     {
+        ArgumentNullException.ThrowIfNull(paradas);
+        if (paradas.Count == 0) return new(false, 0, "No hay puntos visibles para preparar sin conexión.");
         await acceso.WaitAsync(ct);
         try
         {
-            if (!Disponible) return new(false, 0, "Mapa no configurado. La dirección está disponible; podés operar online.");
+            if (!Disponible) return new(false, 0, "La preparación sin conexión no está disponible; esto no indica el estado del mapa online.");
             var estado = await Recuperar(cuenta, hoja.Id, ct);
-            if (estado.Vigente is not { } mapa) return new(false, 0, "Prepará tu recorrido antes de salir del depósito.");
-            var zona = ZonaMapa.Para(hoja, proveedor.Proveedor, proveedor.Estilo);
-            if (mapa.Huella != zona.Huella) return new(false, mapa.Bytes, "Las paradas o el mapa cambiaron. Prepará la zona actual; la descarga anterior se conserva.");
+            if (estado.Vigente is not { } mapa) return new(false, 0, "No hay mapas sin conexión descargados; el mapa online no requiere esta descarga.");
+            var zona = ZonaMapa.Para(hoja.Id, paradas, proveedor.Proveedor, proveedor.Estilo);
+            if (mapa.Huella != zona.Huella) return new(false, mapa.Bytes, "Las paradas o el mapa cambiaron. La descarga anterior se conserva; el mapa online sigue disponible.");
             var recursos = await proveedor.ConsultarAsync(mapa.RegionId, ct);
             return recursos.Completo && recursos.Bytes > 0
                 ? new(true, recursos.Bytes, "Recorrido preparado.")
-                : new(false, 0, "Prepará nuevamente tu recorrido antes de salir.");
+                : new(false, 0, recursos.Error is { Length: > 0 } error
+                    ? $"Mapbox no confirmó el paquete ({error}); el mapa online requiere conexión."
+                    : "La descarga offline no está completa; el mapa online requiere conexión.");
         }
         finally { acceso.Release(); }
     }
+    public Task<PreparacionMapa> DescargarAsync(CuentaMovil cuenta, HojaRuta hoja,
+        IProgress<ProgresoMapa> progreso, CancellationToken ct = default) =>
+        DescargarAsync(cuenta, hoja, hoja.Paradas, progreso, ct);
+
     public async Task<PreparacionMapa> DescargarAsync(CuentaMovil cuenta, HojaRuta hoja,
-        IProgress<ProgresoMapa> progreso, CancellationToken ct = default)
+        IReadOnlyCollection<ParadaRuta> paradas, IProgress<ProgresoMapa> progreso, CancellationToken ct = default)
     {
+        ArgumentNullException.ThrowIfNull(paradas);
+        if (paradas.Count == 0) throw new InvalidOperationException("No hay puntos visibles para preparar sin conexión.");
         await acceso.WaitAsync(ct);
         string? intento = null; var publicada = false;
         try
         {
             if (!Disponible) throw new InvalidOperationException("El mapa offline aún no está disponible en este equipo.");
-            var zona = ZonaMapa.Para(hoja, proveedor.Proveedor, proveedor.Estilo);
+            var zona = ZonaMapa.Para(hoja.Id, paradas, proveedor.Proveedor, proveedor.Estilo);
             var anterior = await Recuperar(cuenta, hoja.Id, ct);
             if (anterior.Intento is not null || anterior.Retirada is not null)
                 throw new IOException("No se pudo limpiar la descarga anterior. Reintentá antes de descargar otra zona.");
@@ -45,7 +59,9 @@ public sealed class ServicioPreparacionMapa(RepositorioJornadasSqlite datos, IPr
             await proveedor.DescargarAsync(intento, zona, progreso, ct);
             var recursos = await proveedor.ConsultarAsync(intento, ct);
             if (!recursos.Completo || recursos.Bytes <= 0)
-                throw new IOException("El estilo y las teselas no están completos. La descarga anterior se conserva.");
+                throw new IOException(recursos.Error is { Length: > 0 } error
+                    ? $"Mapbox no confirmó el paquete ({error}). La descarga anterior se conserva."
+                    : "El estilo y las teselas no están completos. La descarga anterior se conserva.");
             ct.ThrowIfCancellationRequested();
             var vigente = new MapaGuardado(intento, zona.Huella, recursos.Bytes, DateTimeOffset.UtcNow);
             // Una vez iniciada la publicación local, terminar el commit antes de atender una cancelación.
