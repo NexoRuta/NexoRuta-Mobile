@@ -273,7 +273,7 @@ public sealed partial class SincronizadorJornadaTests
             Datos = new(Raiz + "/sql", Claves); Archivos = new(Raiz + "/evidencias", Claves);
             Jornada = JornadaLocal.Iniciar(Guid.NewGuid(), Guid.NewGuid(), Cuenta, DateTimeOffset.UtcNow);
         }
-        internal async Task Preparar(bool conFoto = false, bool cerrar = true, bool soloInicio = false, string estadoServidor = "Despachada", bool bloquearDiscrepanciasCarga = false)
+        internal async Task Preparar(bool conFoto = false, bool cerrar = true, bool soloInicio = false, string estadoServidor = "Despachada", bool bloquearDiscrepanciasCarga = false, bool esRetiro = false, bool pruebaPendiente = false, bool enEstaRuta = false)
         {
             if (!soloInicio)
             {
@@ -286,10 +286,10 @@ public sealed partial class SincronizadorJornadaTests
             var hoja = new HojaRuta { Id = Jornada.RutaId, JornadaId = Jornada.Id, RepartidorAccesoId = Cuenta.AccesoId,
                 VehiculoId = Guid.NewGuid(), Fecha = DateOnly.FromDateTime(DateTime.Today), Estado = estadoServidor, Version = 1,
                 Politica = new() { Version = 1, ZonaHoraria = "America/Montevideo", BloquearDiscrepanciasCarga = bloquearDiscrepanciasCarga },
-                Paradas = [new() { Reglas = new() { VersionId = Guid.NewGuid(), NumeroVersion = 1, MaximoIntentos = 3,
+                Paradas = [new() { EsRetiro = esRetiro, Reglas = new() { VersionId = Guid.NewGuid(), NumeroVersion = 1, MaximoIntentos = 3,
                 IntervaloEntreIntentosMinutos = 1, PoliticaDevolucionAlAgotarIntentos = "DecisionOperativa",
                 RequiereFoto = true, RequiereNombre = true, Motivos = [new("AUSENTE", "Ausente")] }, EnvioId = Envio, Orden = 1, Activa = true, EnvioVersion = 2, Direccion = "Dirección de prueba",
-                    Bultos = [new() { Id = Bulto, Codigo = "TEST" }] }] };
+                    Bultos = [new() { Id = Bulto, Codigo = "TEST", Resultado = pruebaPendiente ? "EntregaPendienteValidacion" : "Pendiente", EnEstaRuta = enEstaRuta }] }] };
             await Datos.GuardarHojaAsync(Cuenta, hoja.Id, SerializadorHojaRuta.Serializar(hoja));
             await Datos.CrearAsync(Jornada);
         }

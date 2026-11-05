@@ -1,6 +1,7 @@
 namespace NexoRuta.Mobile.Core.Rutas;
 public sealed class BultoRuta
 {
+    public bool EnEstaRuta { get; init; }
     public Guid Id { get; init; }
     public string Codigo { get; init; } = "";
     public decimal PesoGramos { get; init; }

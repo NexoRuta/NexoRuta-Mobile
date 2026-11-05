@@ -3,6 +3,7 @@ namespace NexoRuta.Mobile.Core.Jornadas;
 public sealed class DatosOperacionMovil
 {
     public ResultadoBultoMovil[]? ResultadosBultos { get; init; }
+    public Guid? ResuelveOperacionId { get; init; }
     public Guid? BultoId { get; init; }
     public Guid[]? BultoIds { get; init; }
     public string? Nombre { get; init; }

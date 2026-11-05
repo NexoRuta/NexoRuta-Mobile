@@ -364,11 +364,38 @@ public sealed class HojaRutaViewModel : INotifyPropertyChanged
         while (actual.Count > deseado.Count) actual.RemoveAt(actual.Count - 1);
     }
     public string EstadoPresentado(ParadaRuta parada) =>
+        ConflictoRetiro(parada.EnvioId) is not null ? "Retiro rechazado · requiere resolución" :
         EntregaFisica(parada.EnvioId) && Estado(parada) is not ("Entregado" or "EntregadoParcialmente" or "EntregaPendienteValidacion" or "EntregaSinValidacion" or "Retirado" or "RetiroEnDeposito" or "EntregadoComercio")
-            ? "Entrega registrada · en revisión" : Estado(parada);
+            ? parada.EsRetiro ? "Retiro declarado · pendiente de confirmación" : "Entrega registrada · en revisión" : Estado(parada);
     public bool EntregaFisica(Guid envio) => Jornada?.Operaciones.Any(o => o.EnvioId == envio && o.Tipo is TipoOperacionLocal.EntregaFisica or TipoOperacionLocal.EntregaBultos or TipoOperacionLocal.RetirarBultos) ?? false;
     public string Estado(ParadaRuta parada) => VistaParada.Obtener(parada, vistaRemota, confirmaciones.Values).Estado;
-    public BultoRuta[] BultosActuales(ParadaRuta parada) => vistaRemota?.Paradas.SingleOrDefault(p => p.EnvioId == parada.EnvioId)?.Bultos ?? parada.Bultos;
+    public OperacionLocal? ConflictoRetiro(Guid envio) => Jornada?.Operaciones.LastOrDefault(o => o.EnvioId == envio && o.Tipo == TipoOperacionLocal.RetirarBultos) is { } ultima
+        && confirmaciones.TryGetValue(ultima.Id, out var ack) && ack.Resultado == "Conflicto" ? ultima : null;
+    public bool OperacionRechazada(OperacionLocal operacion) => confirmaciones.TryGetValue(operacion.Id, out var ack) && ack.Resultado == "Conflicto";
+    public BultoRuta[] BultosActuales(ParadaRuta parada)
+    {
+        var actuales = (vistaRemota?.Paradas.SingleOrDefault(p => p.EnvioId == parada.EnvioId)?.Bultos ?? parada.Bultos).ToDictionary(b => b.Id);
+        foreach (var op in Jornada?.Operaciones.Where(o => o.EnvioId == parada.EnvioId && o.Tipo == TipoOperacionLocal.EntregaBultos) ?? [])
+        {
+            if (OperacionRechazada(op)) continue;
+            var d = op.Datos.Deserialize(DatosOperacionJson.Default.DatosOperacionMovil)!;
+            foreach (var r in d.ResultadosBultos ?? [])
+            {
+                if (!r.Entregado || !actuales.TryGetValue(r.BultoId, out var b)) continue;
+                // A server projection at a newer parcel version wins over the local journal.
+                if (confirmaciones.TryGetValue(op.Id, out var ack) && ack.VersionesBulto.TryGetValue(b.Id, out var version) && b.Version >= version) continue;
+                if (b.Resultado is not ("Pendiente" or "EntregaPendienteValidacion")) continue;
+                actuales[b.Id] = new() { Id = b.Id, Codigo = b.Codigo, PesoGramos = b.PesoGramos, VolumenCm3 = b.VolumenCm3,
+                    EnEstaRuta = true, Version = b.Version, Custodia = b.Custodia, Resultado = PruebaLocalCompleta(d, parada.Reglas)
+                        ? confirmaciones.ContainsKey(op.Id) ? "Entregado" : "PruebaListaPendienteSincronizacion" : "EntregaPendienteValidacion" };
+            }
+        }
+        return actuales.Values.ToArray();
+    }
+    private static bool PruebaLocalCompleta(DatosOperacionMovil d, ReglasEnvio reglas) => d.Latitud is not null && d.Longitud is not null
+        && d.PrecisionMetros is not null && d.PosicionEnUtc is not null && (!reglas.RequiereFoto || d.FotoId is not null)
+        && (!reglas.RequiereFirma || d.FirmaId is not null) && (!reglas.RequiereNombre || !string.IsNullOrWhiteSpace(d.Nombre))
+        && (!reglas.RequiereDocumento || !string.IsNullOrWhiteSpace(d.Documento));
     public bool ParadaActiva(ParadaRuta parada) => VistaParada.Obtener(parada, vistaRemota, confirmaciones.Values).Activa;
     private async Task<bool> ConsultarCambios()
     {
@@ -383,7 +410,7 @@ public sealed class HojaRutaViewModel : INotifyPropertyChanged
         && confirmaciones.TryGetValue(o.Id, out var r) && r.Resultado == "Aplicada") ?? false;
     private EstadoJornadaIndicador EstadoJornada() => EstadoJornadaIndicador.Crear(Jornada,
         confirmaciones.ToDictionary(x => x.Key, x => x.Value.Resultado), (vistaRemota ?? Hoja).Estado);
-    private string ResultadoOperacion(OperacionLocal operacion, string aplicada, string pendiente)
+    public string ResultadoOperacion(OperacionLocal operacion, string aplicada, string pendiente)
     {
         if (!confirmaciones.TryGetValue(operacion.Id, out var acuse)) return pendiente;
         if (acuse.Resultado != "Aplicada") return "El servidor rechazó la operación: " + (acuse.Detalle ?? "revisá la jornada antes de volver a intentar.");
@@ -449,7 +476,7 @@ public sealed class HojaRutaViewModel : INotifyPropertyChanged
         var real = vistaRemota?.Paradas.SingleOrDefault(p => p.EnvioId == parada.EnvioId && p.EnvioVersion >= vista.Version) ?? parada;
         var estadoRuta = real.ResultadoVisita == "Completada" ? "Visita completada" : real.ResultadoVisita == "Retirada" ? "Retirada de esta ruta · " + vista.MotivoSuspension : real.ResultadoVisita == "CerradaSinResultado" ? "Visita cerrada sin resultado acreditado" : vista.Activa ? "Parada activa"
             : "Fuera de esta ruta" + (string.IsNullOrWhiteSpace(vista.MotivoSuspension) ? " · motivo no informado" : " · " + vista.MotivoSuspension);
-        return new(parada.EnvioId, parada.Orden, parada.Destinatario, parada.Direccion, vista.Estado,
+        return new(parada.EnvioId, parada.Orden, parada.Destinatario, parada.Direccion, EstadoPresentado(parada),
             TextoReparto.Bultos(real.Bultos.Length), estadoRuta, Custodia(real.Bultos));
     }
     private static string Custodia(IReadOnlyCollection<BultoRuta> bultos)
@@ -506,6 +533,8 @@ public sealed class HojaRutaViewModel : INotifyPropertyChanged
         var cargados = Cargados();
         if (Jornada is not null) foreach (var op in Jornada.Operaciones)
         {
+            if (OperacionRechazada(op)) continue;
+            if (op.Tipo == TipoOperacionLocal.RetirarBultos && (!confirmaciones.TryGetValue(op.Id, out var ack) || ack.Resultado != "Aplicada")) continue;
             if (op.Tipo == TipoOperacionLocal.EntregaFisica)
                 foreach (var b in Hoja.Paradas.Single(p => p.EnvioId == op.EnvioId).Bultos) cargados.Remove(b.Id);
             if (op.Tipo is TipoOperacionLocal.EntregaBultos or TipoOperacionLocal.RetirarBultos)

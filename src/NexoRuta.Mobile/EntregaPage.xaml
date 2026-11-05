@@ -11,6 +11,7 @@
   </VerticalStackLayout></Grid></Border>
   <Border Style="{StaticResource Notice}" IsVisible="{Binding Mensaje, Converter={StaticResource TieneTexto}}"><Label Text="{Binding Mensaje}" FontSize="14" /></Border>
   <Border Style="{StaticResource Notice}" IsVisible="{Binding MostrarResultado}"><Label Text="{Binding Indicacion}" /></Border>
+  <Button Text="Reintentar retiro" Command="{Binding ReintentarRetiro}" IsVisible="{Binding MostrarResolucionRetiro}" Style="{StaticResource SecondaryButton}" />
   <VerticalStackLayout IsVisible="{Binding PuedeRegistrar}" Spacing="18">
    <VerticalStackLayout Spacing="6"><Label Text="{Binding TituloRegistro}" Style="{StaticResource SectionTitle}" SemanticProperties.HeadingLevel="Level2" /><Label Text="Completá los datos del receptor y las pruebas solicitadas por tu operador." Style="{StaticResource Caption}" /></VerticalStackLayout>
    <Border Style="{StaticResource Card}"><VerticalStackLayout Spacing="16">

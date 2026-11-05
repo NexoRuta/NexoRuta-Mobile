@@ -6,7 +6,8 @@ public sealed class ComandoAsincrono(Func<Task> ejecutar, Func<bool>? permitido 
     private bool ejecutando;
     public event EventHandler? CanExecuteChanged;
     public bool CanExecute(object? parameter) => !ejecutando && (permitido?.Invoke() ?? true);
-    public async void Execute(object? parameter)
+    public async void Execute(object? parameter) => await EjecutarAsync(parameter);
+    public async Task EjecutarAsync(object? parameter = null)
     {
         if (!CanExecute(parameter)) return;
         ejecutando = true; Actualizar();

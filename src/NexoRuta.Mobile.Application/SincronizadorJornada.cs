@@ -56,7 +56,7 @@ public sealed class SincronizadorJornada(ClienteSesionMovil cliente, Repositorio
                     if (pendiente.Tipo is TipoOperacionLocal.EntregaBultos or TipoOperacionLocal.RetirarBultos)
                     {
                         var d = pendiente.Datos.Deserialize(DatosOperacionJson.Default.DatosOperacionMovil)!;
-                        var nuevos = new DatosOperacionMovil { ResultadosBultos = d.ResultadosBultos?.Select(b =>
+                        var nuevos = new DatosOperacionMovil { ResuelveOperacionId = d.ResuelveOperacionId, ResultadosBultos = d.ResultadosBultos?.Select(b =>
                             b with { Version = versionesBulto.GetValueOrDefault(b.BultoId, b.Version) }).ToArray(),
                             FotoId = d.FotoId, FirmaId = d.FirmaId, Nombre = d.Nombre, Documento = d.Documento,
                             Latitud = d.Latitud, Longitud = d.Longitud, PrecisionMetros = d.PrecisionMetros, PosicionEnUtc = d.PosicionEnUtc };

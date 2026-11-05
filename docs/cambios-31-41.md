@@ -7,3 +7,5 @@ La parada descarga `EsRetiro`, resultado y versión de cada bulto y política pa
 La evaluación de carga excluye retiros y bultos finalizados. Una parada de entrega parcial puede salir con una parte cargada cuando su publicación lo permite. Los bultos retirados se agregan a la rendición; cerrar la jornada no los recibe físicamente.
 
 La guía reproducible y el ADR se encuentran en `docs/cambios-requerimientos` del repositorio principal. El cliente de consola de `tests/Cambios.DemoMobile` ejecuta las bibliotecas reales con SQLite y API real en Cloud; no equivale a ejecutar MAUI/Android.
+
+La corrección H1–H6 proyecta el diario local al habilitar captura de prueba, consume `enEstaRuta` para no completar evidencia desde otra visita y conserva separados pendiente/aplicado/conflicto. Solo un retiro aplicado entra en rendición. **Reintentar retiro** exige confirmación y crea un comando con `datos.resuelveOperacionId`; el transporte conserva ese sobre ante pérdida de respuesta y nunca elimina el rechazo anterior. Pruebas: `EntregaBultosInterfazTests.cs`. Android nativo continúa pendiente; ver el informe del superproyecto.

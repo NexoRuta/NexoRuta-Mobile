@@ -42,9 +42,10 @@ public sealed class EntregaViewModel : INotifyPropertyChanged
     public bool MostrarFirma => Parada.EsRetiro || Parada.Reglas.RequiereFirma || firmaId is not null;
     public bool Ocupado => padre.Ocupado;
     public MotivoNoEntrega[] Motivos => Parada.Reglas.Motivos;
-    public bool PuedeRegistrar => padre.Iniciada && padre.Salida && !padre.Cerrada && (padre.ParadaActiva(Parada) && !padre.EntregaFisica(Parada.EnvioId) || padre.BultosActuales(Parada).Any(b => b.Resultado == "EntregaPendienteValidacion")) && padre.Estado(Parada) is not ("Entregado" or "EntregaSinValidacion");
-    public bool MostrarIntento => PuedeRegistrar && !padre.EntregaFisica(Parada.EnvioId);
-    public string AccionEntrega => Parada.EsRetiro ? "Confirmar retiro" : padre.EntregaFisica(Parada.EnvioId) ? "Completar entrega" : "Confirmar entrega";
+    public bool PuedeRegistrar => padre.Iniciada && padre.Salida && !padre.Cerrada && (padre.ParadaActiva(Parada) && !padre.EntregaFisica(Parada.EnvioId) && padre.BultosActuales(Parada).Any(b => b.Resultado == "Pendiente") || padre.BultosActuales(Parada).Any(b => b.Resultado == "EntregaPendienteValidacion" && b.EnEstaRuta)) && (!Parada.EsRetiro || padre.ConflictoRetiro(Parada.EnvioId) is null);
+    private bool EntregaDeclarada => padre.EntregaFisica(Parada.EnvioId) || padre.BultosActuales(Parada).Any(b => b.Resultado == "EntregaPendienteValidacion" && b.EnEstaRuta);
+    public bool MostrarIntento => PuedeRegistrar && !EntregaDeclarada;
+    public string AccionEntrega => Parada.EsRetiro ? "Confirmar retiro" : EntregaDeclarada ? "Completar entrega" : "Confirmar entrega";
     public string FotoEstado => fotoId is null ? "Pendiente" : capturas.Any(x => x.Id == fotoId && !x.Lista) ? "Foto interrumpida; volvé a capturarla." : "Lista";
     public string FirmaEstado => firmaId is null ? "Pendiente" : capturas.Any(x => x.Id == firmaId && !x.Lista) ? "Firma interrumpida; volvé a capturarla." : "Lista";
     public bool QuitarFotoVisible => capturas.Any(x => x.Id == fotoId && x.OperacionId is null);
@@ -55,12 +56,14 @@ public sealed class EntregaViewModel : INotifyPropertyChanged
     public ComandoAsincrono QuitarFirma { get; }
     public ComandoAsincrono Entregar { get; }
     public ComandoAsincrono Intento { get; }
+    public ComandoAsincrono ReintentarRetiro { get; }
+    public bool MostrarResolucionRetiro => Parada.EsRetiro && padre.ConflictoRetiro(Parada.EnvioId) is not null && !padre.Cerrada;
     public event PropertyChangedEventHandler? PropertyChanged;
     public EntregaViewModel(HojaRutaViewModel padre, ParadaRuta parada, RepositorioJornadasSqlite datos,
         EvidenciasLocales evidencias, IInteraccionReparto interaccion)
     {
         this.padre = padre; Parada = parada; this.datos = datos; this.evidencias = evidencias; this.interaccion = interaccion;
-        foreach (var b in parada.Bultos.Where(b => parada.EsRetiro || b.Resultado is "Pendiente" or "EntregaPendienteValidacion")) Seleccion.Add(new(b, parada.Reglas.Motivos) { Escaneado = b.Resultado == "EntregaPendienteValidacion" });
+        foreach (var b in padre.BultosActuales(parada).Where(b => parada.EsRetiro || b.Resultado == "Pendiente" || b.Resultado == "EntregaPendienteValidacion" && b.EnEstaRuta)) Seleccion.Add(new(b, parada.Reglas.Motivos) { Escaneado = b.Resultado == "EntregaPendienteValidacion" });
         EscanearBulto = new(() => Ejecutar(async () =>
         {
             var codigo = await interaccion.EscanearAsync(); if (codigo is null) return;
@@ -81,7 +84,7 @@ public sealed class EntregaViewModel : INotifyPropertyChanged
             if (capturas.Any(x => (x.Id == fotoId || x.Id == firmaId) && !x.Lista))
                 throw new InvalidOperationException("Recapturá o descartá los borradores interrumpidos antes de confirmar.");
             if (Parada.EsRetiro && (fotoId is null || firmaId is null)) throw new InvalidOperationException("El retiro requiere foto del estado y firma de quien entrega.");
-            var repetirPrueba = !Parada.EsRetiro && padre.EntregaFisica(Parada.EnvioId);
+            var repetirPrueba = !Parada.EsRetiro && EntregaDeclarada;
             if (!repetirPrueba && (Seleccion.All(b => !b.Escaneado) || Parada.EsRetiro && Seleccion.Any(b => !b.Escaneado)
                 || !Parada.EsRetiro && !Parada.Reglas.PermiteEntregaParcial && Seleccion.Any(b => !b.Escaneado)
                 || !Parada.EsRetiro && Seleccion.Any(b => !b.Escaneado && b.Motivo is null)))
@@ -89,16 +92,18 @@ public sealed class EntregaViewModel : INotifyPropertyChanged
             var ubicacion = await UbicacionActual();
             var prueba = new DatosOperacionMovil
             {
-                ResultadosBultos = Seleccion.Where(b => !repetirPrueba || padre.BultosActuales(Parada).Any(actual => actual.Id == b.Bulto.Id && actual.Resultado == "EntregaPendienteValidacion")).Select(b => new ResultadoBultoMovil(b.Bulto.Id, b.Bulto.Version, b.Escaneado, b.Motivo?.Codigo)).ToArray(),
+                ResultadosBultos = Seleccion.Where(b => !repetirPrueba || padre.BultosActuales(Parada).Any(actual => actual.Id == b.Bulto.Id && actual.Resultado == "EntregaPendienteValidacion" && actual.EnEstaRuta)).Select(b => new ResultadoBultoMovil(b.Bulto.Id, b.Bulto.Version, repetirPrueba || b.Escaneado, repetirPrueba ? null : b.Motivo?.Codigo)).ToArray(),
                 Nombre = Nombre, Documento = Documento, FotoId = fotoId, FirmaId = firmaId,
                 Latitud = ubicacion?.Latitude, Longitud = ubicacion?.Longitude,
                 PrecisionMetros = ubicacion?.Accuracy, PosicionEnUtc = ubicacion?.Timestamp
             };
             var ids = capturas.Where(x => x.OperacionId is null && (x.Id == fotoId || x.Id == firmaId)).Select(x => x.Id).ToArray();
-            await datos.RegistrarConCapturasAsync(padre.Cuenta, padre.Jornada!.Id, ids, j =>
+            var registrada = await datos.RegistrarConCapturasAsync(padre.Cuenta, padre.Jornada!.Id, ids, j =>
                 j.RegistrarBultos(Parada.EnvioId, HojaRutaViewModel.Elemento(prueba), DateTimeOffset.UtcNow, Parada.EsRetiro));
             await padre.IntentarSincronizar(); await CargarCapturas();
-            Mensaje = Parada.EsRetiro ? "Retiro registrado. Rendí los bultos al regresar al depósito." : padre.Estado(Parada) == "EntregadoParcialmente" ? "Entrega parcial registrada. Los pendientes conservan su motivo y custodia." : padre.Estado(Parada) == "Entregado" ? "Entrega confirmada. Podés continuar con tu próxima parada." : "Entrega registrada. Completá las pruebas pendientes antes de terminar tu jornada.";
+            Mensaje = padre.ResultadoOperacion(registrada.Operaciones[^1],
+                Parada.EsRetiro ? "Retiro confirmado por el servidor. Rendí los bultos al regresar al depósito." : "Resultado de entrega confirmado por el servidor.",
+                Parada.EsRetiro ? "Retiro guardado localmente, pendiente de confirmación del servidor. Conservá los bultos y consultá su estado antes de rendir." : "Entrega guardada localmente. Podés completar la prueba sin conexión; la validación definitiva se realiza al sincronizar.");
         }), () => PuedeRegistrar && !Ocupado);
         Intento = new(() => Ejecutar(async () =>
         {
@@ -113,6 +118,19 @@ public sealed class EntregaViewModel : INotifyPropertyChanged
                 j => Parada.EsRetiro ? j.RegistrarRetiroFallido(Parada.EnvioId, HojaRutaViewModel.Elemento(prueba), DateTimeOffset.UtcNow) : j.RegistrarIntento(Parada.EnvioId, HojaRutaViewModel.Elemento(prueba), DateTimeOffset.UtcNow));
             fotoId = null; await padre.IntentarSincronizar(); await CargarCapturas(); Mensaje = "Intento registrado.";
         }), () => MostrarIntento && !Ocupado);
+        ReintentarRetiro = new(() => Ejecutar(async () =>
+        {
+            var conflicto = padre.ConflictoRetiro(Parada.EnvioId) ?? throw new InvalidOperationException("No existe un retiro rechazado para resolver.");
+            if (!await interaccion.ConfirmarResolucionRetiroAsync()) return;
+            var original = conflicto.Datos.Deserialize(DatosOperacionJson.Default.DatosOperacionMovil)!;
+            var resolucion = new DatosOperacionMovil { ResuelveOperacionId = conflicto.Id, ResultadosBultos = original.ResultadosBultos,
+                FotoId = original.FotoId, FirmaId = original.FirmaId, Nombre = original.Nombre, Documento = original.Documento,
+                Latitud = original.Latitud, Longitud = original.Longitud, PrecisionMetros = original.PrecisionMetros, PosicionEnUtc = original.PosicionEnUtc };
+            var registrada = await datos.RegistrarConCapturasAsync(padre.Cuenta, padre.Jornada!.Id, [],
+                j => j.RegistrarBultos(Parada.EnvioId, HojaRutaViewModel.Elemento(resolucion), DateTimeOffset.UtcNow, true));
+            await padre.IntentarSincronizar();
+            Mensaje = padre.ResultadoOperacion(registrada.Operaciones[^1], "Resolución del retiro confirmada por el servidor.", "Resolución guardada localmente; pendiente de confirmación del servidor.");
+        }), () => MostrarResolucionRetiro && !Ocupado);
         padre.PropertyChanged += PadreCambio;
     }
     private void PadreCambio(object? sender, PropertyChangedEventArgs e) => Actualizar();
@@ -133,6 +151,8 @@ public sealed class EntregaViewModel : INotifyPropertyChanged
             fotoId = prueba.FotoId ?? fotoId; firmaId = prueba.FirmaId ?? firmaId;
         }
         await CargarCapturas();
+        if (padre.ConflictoRetiro(Parada.EnvioId) is { } conflicto)
+            Mensaje = padre.ResultadoOperacion(conflicto, "", "") + " Conservamos el hecho físico y sus pruebas. Coordiná con el depósito; cuando se resuelva la causa, usá Reintentar retiro.";
     });
     private async Task CargarCapturas()
     {
@@ -179,8 +199,8 @@ public sealed class EntregaViewModel : INotifyPropertyChanged
     public void Desconectar() => padre.PropertyChanged -= PadreCambio;
     private void Actualizar()
     {
-        foreach (var propiedad in new[] { nameof(Ocupado), nameof(PuedeRegistrar), nameof(EstadoActual), nameof(MostrarResultado), nameof(Indicacion), nameof(MostrarIntento), nameof(AccionEntrega), nameof(FotoEstado), nameof(FirmaEstado), nameof(QuitarFotoVisible), nameof(QuitarFirmaVisible) }) Cambiar(propiedad);
-        EscanearBulto?.Actualizar(); TomarFoto?.Actualizar(); Firmar?.Actualizar(); QuitarFoto?.Actualizar(); QuitarFirma?.Actualizar(); Entregar?.Actualizar(); Intento?.Actualizar();
+        foreach (var propiedad in new[] { nameof(MostrarResolucionRetiro), nameof(Ocupado), nameof(PuedeRegistrar), nameof(EstadoActual), nameof(MostrarResultado), nameof(Indicacion), nameof(MostrarIntento), nameof(AccionEntrega), nameof(FotoEstado), nameof(FirmaEstado), nameof(QuitarFotoVisible), nameof(QuitarFirmaVisible) }) Cambiar(propiedad);
+        ReintentarRetiro?.Actualizar(); EscanearBulto?.Actualizar(); TomarFoto?.Actualizar(); Firmar?.Actualizar(); QuitarFoto?.Actualizar(); QuitarFirma?.Actualizar(); Entregar?.Actualizar(); Intento?.Actualizar();
     }
     private void Cambiar([CallerMemberName] string? nombre = null) => PropertyChanged?.Invoke(this, new(nombre));
 }

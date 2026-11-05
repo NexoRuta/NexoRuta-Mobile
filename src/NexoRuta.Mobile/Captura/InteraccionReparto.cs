@@ -14,6 +14,8 @@ public sealed class InteraccionReparto : IInteraccionReparto
         Actual.DisplayAlertAsync("Confirmar salida con diferencias",
             $"Faltan {bultosPendientes} bulto(s) por verificar en {paradasAfectadas} parada(s). Si continuás, esas paradas quedarán suspendidas y esos envíos no saldrán a reparto. El depósito deberá revisar la carga.",
             "Confirmar salida", "Volver a la carga");
+    public Task<bool> ConfirmarResolucionRetiroAsync() => Actual.DisplayAlertAsync("Resolver retiro rechazado",
+        "Coordiná con el depósito y resolvé la causa del rechazo antes de continuar. Se enviará una nueva operación vinculada al rechazo; se conservarán el hecho físico y sus pruebas.", "Reintentar retiro", "Volver");
     public Task<bool> ConfirmarCierreAsync(bool pruebaPendiente, int bultosSinRendir) => Actual.DisplayAlertAsync("Terminar jornada",
         (bultosSinRendir > 0 ? $"Hay {bultosSinRendir} bulto(s) sin entrega ni rendición. Se registrará una incidencia y conservarás su custodia hasta la recepción física en depósito.\n\n" : "")
         + (pruebaPendiente ? "Hay entregas con prueba pendiente o sin validación confirmada. El servidor evaluará su prueba al recibir el cierre, después de sincronizar los registros anteriores."
