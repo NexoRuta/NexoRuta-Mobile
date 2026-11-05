@@ -10,5 +10,5 @@ public enum TipoOperacionLocal
     ConfirmarCarga = 6,
     IntentoFallido = 7,
     Rendicion = 8,
-    Posicion = 9
+    Posicion = 9, EntregaBultos = 10, RetirarBultos = 11, RetiroFallido = 12
 }

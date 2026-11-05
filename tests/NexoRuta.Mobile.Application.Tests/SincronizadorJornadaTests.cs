@@ -215,6 +215,41 @@ public sealed partial class SincronizadorJornadaTests
         Assert.Empty(await f.Datos.LeerCapturasAsync(f.Cuenta, f.Jornada.Id));
     }
 
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task BultosConEvidenciaPersistenTrasReinicioYRespuestaPerdidaNoCambiaSobre(bool retiro)
+    {
+        using var f = new Escenario(); await f.Preparar(soloInicio: true, cerrar: false);
+        var captura = await new EvidenciasLocales(f.Datos, f.Archivos).GuardarAsync(f.Cuenta, f.Jornada.Id, f.Envio, "Foto", f.Foto);
+        var d = new DatosOperacionMovil { FotoId = captura.Id, ResultadosBultos = [new(f.Bulto, 0, true, null)] };
+        var elemento = JsonSerializer.SerializeToElement(d, DatosOperacionJson.Default.DatosOperacionMovil);
+        await f.Datos.RegistrarConCapturasAsync(f.Cuenta, f.Jornada.Id, [captura.Id], j => j.RegistrarBultos(f.Envio, elemento, DateTimeOffset.UtcNow, retiro));
+        var restaurada = await f.Datos.LeerAsync(f.Cuenta, f.Jornada.Id);
+        Assert.Equal(2, restaurada!.CantidadPendientes);
+        var intentos = new List<byte[]>(); bool perderRespuesta = true;
+        using var cliente = f.Cliente(async (request, ct) => {
+            if (request.Method == HttpMethod.Put) return new(HttpStatusCode.NoContent);
+            var bytes = await request.Content!.ReadAsByteArrayAsync(ct);
+            var op = JsonSerializer.Deserialize(bytes, ContratosRepartoJson.Default.SobreOperacion)!;
+            if (op.Tipo is "EntregaBultos" or "RetirarBultos") {
+                intentos.Add(bytes);
+                if (perderRespuesta) { perderRespuesta = false; throw new HttpRequestException("Respuesta perdida tras aplicar"); }
+            }
+            return Confirmar(op, f.Envio);
+        });
+        using (var sync = new SincronizadorJornada(cliente, f.Datos, f.Archivos))
+            await Assert.ThrowsAsync<HttpRequestException>(() => sync.SincronizarAsync(f.Cuenta, f.Jornada.Id));
+        // Reopen both SQLite and encrypted evidence storage, as after application restart.
+        using var reabierto = new RepositorioJornadasSqlite(f.Raiz + "/sql", f.Claves);
+        using var archivos = new RepositorioArchivosCifrados(f.Raiz + "/evidencias", f.Claves);
+        using (var sync = new SincronizadorJornada(cliente, reabierto, archivos)) Assert.Equal(1, await sync.SincronizarAsync(f.Cuenta, f.Jornada.Id));
+        Assert.Equal(2, intentos.Count); Assert.Equal(intentos[0], intentos[1]);
+        Assert.False((await reabierto.LeerAsync(f.Cuenta, f.Jornada.Id))!.TienePendientes);
+        Assert.Equal(f.Foto, await archivos.LeerAsync(f.Cuenta, captura.Id));
+    }
+
     private static HttpResponseMessage Confirmar(SobreOperacion op, Guid envio) => Json(new ConfirmacionOperacion
     {
         Id = op.Id, Secuencia = op.Secuencia, Resultado = "Aplicada", VersionRuta = op.Secuencia,

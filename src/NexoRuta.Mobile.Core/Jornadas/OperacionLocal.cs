@@ -18,7 +18,7 @@ public sealed class OperacionLocal
             throw new ArgumentException("La identidad, secuencia o tipo de operación no son válidos.");
 
         var requiereEnvio = tipo is TipoOperacionLocal.EntregaFisica or TipoOperacionLocal.EvidenciaEntrega
-            or TipoOperacionLocal.CargarBulto or TipoOperacionLocal.IntentoFallido;
+            or TipoOperacionLocal.CargarBulto or TipoOperacionLocal.IntentoFallido or TipoOperacionLocal.EntregaBultos or TipoOperacionLocal.RetirarBultos or TipoOperacionLocal.RetiroFallido;
         if (requiereEnvio ? envioId is null || envioId == Guid.Empty : envioId is not null)
             throw new ArgumentException("El envío no corresponde al tipo de operación.");
 

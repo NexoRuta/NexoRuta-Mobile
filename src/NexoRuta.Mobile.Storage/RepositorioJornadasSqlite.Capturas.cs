@@ -54,7 +54,7 @@ public sealed partial class RepositorioJornadasSqlite
             var jornada = await LeerAsync(db, tx, cuenta, jornadaId, ct) ?? throw new InvalidOperationException("No existe la jornada.");
             var cantidad = jornada.Operaciones.Count;
             var operacion = registrar(jornada);
-            if (operacion.Tipo is not (TipoOperacionLocal.EntregaFisica or TipoOperacionLocal.EvidenciaEntrega or TipoOperacionLocal.IntentoFallido)
+            if (operacion.Tipo is not (TipoOperacionLocal.EntregaFisica or TipoOperacionLocal.EvidenciaEntrega or TipoOperacionLocal.IntentoFallido or TipoOperacionLocal.EntregaBultos or TipoOperacionLocal.RetirarBultos or TipoOperacionLocal.RetiroFallido)
                 || jornada.Operaciones.Count != cantidad + 1 || jornada.Operaciones[^1].Id != operacion.Id)
                 throw new InvalidOperationException("La captura debe confirmar exactamente una operación nueva.");
             foreach (var id in capturas)

@@ -48,6 +48,10 @@ public sealed class JornadaLocal
         return Agregar(TipoOperacionLocal.InicioJornada, null, DatosVacios(), instante);
     }
 
+    public OperacionLocal RegistrarBultos(Guid envioId, JsonElement datos, DateTimeOffset instante, bool retiro = false)
+        => Agregar(retiro ? TipoOperacionLocal.RetirarBultos : TipoOperacionLocal.EntregaBultos, envioId, datos, instante);
+    public OperacionLocal RegistrarRetiroFallido(Guid envioId, JsonElement datos, DateTimeOffset instante)
+        => Agregar(TipoOperacionLocal.RetiroFallido, envioId, datos, instante);
     public OperacionLocal RegistrarEntregaFisica(Guid envioId, JsonElement datos, DateTimeOffset instante)
         => Agregar(TipoOperacionLocal.EntregaFisica, envioId, datos, instante);
 

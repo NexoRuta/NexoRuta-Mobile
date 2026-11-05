@@ -16,7 +16,7 @@ public sealed partial class RepositorioJornadasSqlite
     }
     public async Task GuardarSobreAsync(CuentaMovil cuenta, Guid jornadaId, Guid operacionId, byte[] sobre, CancellationToken ct = default)
     {
-        if (sobre.Length is 0 or > 32768) throw new ArgumentException("El comando excede su tamaño admitido.");
+        if (sobre.Length is 0 or > 131072) throw new ArgumentException("El comando excede su tamaño admitido.");
         await acceso.WaitAsync(ct);
         try
         {

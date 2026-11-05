@@ -15,7 +15,9 @@ public sealed record VistaHoja(HojaRuta Original, string Estado, string FaseJorn
         get
         {
             var activa = Datos.Estado != "Finalizada" ? Datos.Paradas.Count(p => p.Activa) : 0;
-            var fuera = Datos.Paradas.Length - activa;
+            var completadas = Datos.Paradas.Count(p => p.ResultadoVisita == "Completada");
+            var fuera = Datos.Paradas.Length - activa - completadas;
+            if (completadas > 0) return $"{activa} activas · {completadas} completadas · {fuera} fuera de ruta";
             if (activa == 0) return fuera == 0 ? "Sin paradas" : $"0 activas · {fuera} fuera de ruta";
             if (fuera == 0) return activa == 1 ? "1 parada activa" : $"{activa} paradas activas";
             return $"{activa} activas · {fuera} fuera de ruta";

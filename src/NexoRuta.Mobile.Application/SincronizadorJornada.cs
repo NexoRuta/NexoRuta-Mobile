@@ -33,8 +33,12 @@ public sealed class SincronizadorJornada(ClienteSesionMovil cliente, Repositorio
             var bytesHoja = await datos.LeerHojaAsync(cuenta, jornada.RutaId, ct) ?? throw new InvalidDataException("No existe la hoja descargada de esta jornada.");
             var hoja = SerializadorHojaRuta.Deserializar(bytesHoja, cuenta);
             var versiones = hoja.Paradas.ToDictionary(x => x.EnvioId, x => x.EnvioVersion);
+            var versionesBulto = hoja.Paradas.SelectMany(p => p.Bultos).ToDictionary(b => b.Id, b => b.Version);
             foreach (var bytes in await datos.LeerConfirmacionesAsync(cuenta, jornadaId, ct))
-                AplicarVersiones(Leer(bytes), versiones);
+            {
+                var ack = Leer(bytes); ValidarBultos(ack, versionesBulto); AplicarVersiones(ack, versiones);
+                if (ack.Resultado == "Aplicada") foreach (var b in ack.VersionesBulto) versionesBulto[b.Key] = b.Value;
+            }
             var confirmadas = 0;
             while (confirmadas < 100)
             {
@@ -48,23 +52,35 @@ public sealed class SincronizadorJornada(ClienteSesionMovil cliente, Repositorio
                     long? version = pendiente.EnvioId is { } envio
                         ? versiones.GetValueOrDefault(envio, -1) : null;
                     if (version < 0) throw new InvalidDataException("La operación pertenece a otro envío.");
+                    var datosEnvio = pendiente.Datos;
+                    if (pendiente.Tipo is TipoOperacionLocal.EntregaBultos or TipoOperacionLocal.RetirarBultos)
+                    {
+                        var d = pendiente.Datos.Deserialize(DatosOperacionJson.Default.DatosOperacionMovil)!;
+                        var nuevos = new DatosOperacionMovil { ResultadosBultos = d.ResultadosBultos?.Select(b =>
+                            b with { Version = versionesBulto.GetValueOrDefault(b.BultoId, b.Version) }).ToArray(),
+                            FotoId = d.FotoId, FirmaId = d.FirmaId, Nombre = d.Nombre, Documento = d.Documento,
+                            Latitud = d.Latitud, Longitud = d.Longitud, PrecisionMetros = d.PrecisionMetros, PosicionEnUtc = d.PosicionEnUtc };
+                        datosEnvio = JsonSerializer.SerializeToElement(nuevos, DatosOperacionJson.Default.DatosOperacionMovil);
+                    }
                     sobre = JsonSerializer.SerializeToUtf8Bytes(new SobreOperacion
                     {
                         Id = pendiente.Id, Secuencia = pendiente.Secuencia, Tipo = pendiente.Tipo.ToString(),
                         EnvioId = pendiente.EnvioId, VersionEnvio = version, OcurridaEn = pendiente.OcurridaEn,
-                        Datos = pendiente.Datos
+                        Datos = datosEnvio
                     }, ContratosRepartoJson.Default.SobreOperacion);
                     await datos.GuardarSobreAsync(cuenta, jornadaId, pendiente.Id, sobre, ct);
                 }
                 await SubirArchivos(cuenta, jornadaId, pendiente, ct);
                 var resultado = await cliente.EnviarOperacionAsync(
                     cuenta, jornadaId, sobre, pendiente.Id, jornada.CantidadPendientes, ct);
-                Validar(resultado, versiones);
+                Validar(resultado, versiones); ValidarBultos(resultado, versionesBulto);
                 if (resultado.Id != pendiente.Id || resultado.Secuencia != pendiente.Secuencia)
                     throw new InvalidDataException("El servidor no confirmó la operación enviada.");
                 var respuesta = JsonSerializer.SerializeToUtf8Bytes(resultado, ContratosRepartoJson.Default.ConfirmacionOperacion);
                 await datos.ConfirmarSobreAsync(cuenta, jornadaId, pendiente.Id, respuesta, ct);
-                AplicarVersiones(resultado, versiones); confirmadas++;
+                AplicarVersiones(resultado, versiones);
+                if (resultado.Resultado == "Aplicada") foreach (var b in resultado.VersionesBulto) versionesBulto[b.Key] = b.Value;
+                confirmadas++;
             }
             return confirmadas;
         }
@@ -81,6 +97,12 @@ public sealed class SincronizadorJornada(ClienteSesionMovil cliente, Repositorio
             try { await cliente.SubirEvidenciaAsync(cuenta, jornada, envio, id, tipo, contenido, ct); }
             finally { CryptographicOperations.ZeroMemory(contenido); }
         }
+    }
+    private static void ValidarBultos(ConfirmacionOperacion r, Dictionary<Guid, long> versiones)
+    {
+        if (r.VersionesBulto is null || r.VersionesBulto.Any(b => !versiones.ContainsKey(b.Key) || b.Value < 0)
+            || r.Resultado == "Conflicto" && r.VersionesBulto.Count > 0)
+            throw new InvalidDataException("Las versiones de bulto confirmadas no corresponden a la hoja.");
     }
     private static ConfirmacionOperacion Leer(byte[] bytes) => JsonSerializer.Deserialize(bytes, ContratosRepartoJson.Default.ConfirmacionOperacion)
         ?? throw new InvalidDataException("La confirmación local está vacía.");

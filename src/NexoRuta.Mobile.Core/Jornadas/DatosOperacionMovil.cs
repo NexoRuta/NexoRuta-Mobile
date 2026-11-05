@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 namespace NexoRuta.Mobile.Core.Jornadas;
 public sealed class DatosOperacionMovil
 {
+    public ResultadoBultoMovil[]? ResultadosBultos { get; init; }
     public Guid? BultoId { get; init; }
     public Guid[]? BultoIds { get; init; }
     public string? Nombre { get; init; }
@@ -17,3 +18,5 @@ public sealed class DatosOperacionMovil
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(DatosOperacionMovil))]
 public partial class DatosOperacionJson : JsonSerializerContext;
+
+public sealed record ResultadoBultoMovil(Guid BultoId, long Version, bool Entregado, string? Motivo);

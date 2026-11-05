@@ -40,7 +40,8 @@ public sealed class HojaRutaViewModel : INotifyPropertyChanged
     public ObservableCollection<ParadaResumen> Paradas { get; } = [];
     public ObservableCollection<BultoCargaResumen> Carga { get; } = [];
     private int ParadasActivas => Hoja.Paradas.Count(ParadaActiva);
-    private int ParadasFueraDeRuta => Hoja.Paradas.Length - ParadasActivas;
+    private int ParadasCompletadas => Hoja.Paradas.Count(p => !ParadaActiva(p) && (vistaRemota?.Paradas.SingleOrDefault(r => r.EnvioId == p.EnvioId)?.ResultadoVisita ?? p.ResultadoVisita) == "Completada");
+    private int ParadasFueraDeRuta => Hoja.Paradas.Length - ParadasActivas - ParadasCompletadas;
     private int BultosActivos => Hoja.Paradas.Where(ParadaActiva).Sum(p => p.Bultos.Length);
     private string TextoParadasActivas => ParadasActivas == 1 ? "1 parada activa" : $"{ParadasActivas} paradas activas";
     private string TextoParadasFueraDeRuta => ParadasFueraDeRuta == 1 ? "1 fuera de ruta" : $"{ParadasFueraDeRuta} fuera de ruta";
@@ -58,7 +59,7 @@ public sealed class HojaRutaViewModel : INotifyPropertyChanged
         : !Salida ? "Escaneá los bultos asignados antes de comenzar el reparto."
         : ParadasActivas == 0 ? $"No hay entregas activas. {TextoParadasFueraDeRuta}; revisá el detalle y la custodia antes de continuar."
         : "Elegí tu próxima parada para registrar la entrega.";
-    public string CantidadParadas => $"{TextoParadasActivas} · {TextoParadasFueraDeRuta}";
+    public string CantidadParadas => $"{TextoParadasActivas} · {ParadasCompletadas} completadas · {TextoParadasFueraDeRuta}";
     public string EstadoInformativo => !string.IsNullOrWhiteSpace(IncidenciasCierre) ? IncidenciasCierre
         : !Iniciada && ParadasActivas == 0 ? Indicacion
         : !string.IsNullOrWhiteSpace(Mensaje) ? Mensaje : Indicacion;
@@ -131,7 +132,7 @@ public sealed class HojaRutaViewModel : INotifyPropertyChanged
         Escanear = new(() => Ejecutar(async () =>
         {
             var codigo = await interaccion.EscanearAsync(); if (codigo is null) return;
-            var coincidencias = Hoja.Paradas.Where(ParadaActiva).SelectMany(p => p.Bultos.Select(b => (Parada: p, Bulto: b)))
+            var coincidencias = Hoja.Paradas.Where(p => ParadaActiva(p) && !p.EsRetiro).SelectMany(p => p.Bultos.Where(b => b.Resultado == "Pendiente").Select(b => (Parada: p, Bulto: b)))
                 .Where(x => x.Bulto.Codigo == codigo || x.Bulto.Id.ToString() == codigo).ToArray();
             if (coincidencias.Length != 1) throw new InvalidOperationException("El código no identifica un único bulto asignado a esta hoja. Consultá al depósito.");
             var elegido = coincidencias[0];
@@ -169,7 +170,7 @@ public sealed class HojaRutaViewModel : INotifyPropertyChanged
         {
             if ((await datos.LeerCapturasAsync(Cuenta, Jornada!.Id)).Any(x => x.OperacionId is null))
                 throw new InvalidOperationException("Confirmá o descartá explícitamente los borradores de evidencia antes de cerrar.");
-            var pendientes = Hoja.Paradas.Any(p => EntregaFisica(p.EnvioId) && Estado(p) != "Entregado");
+            var pendientes = Hoja.Paradas.Any(p => !p.EsRetiro && BultosActuales(p).Any(b => b.Resultado == "EntregaPendienteValidacion"));
             var sinRendir = BultosParaRendir().Count;
             if (!await interaccion.ConfirmarCierreAsync(pendientes, sinRendir)) return;
             Jornada = await datos.ModificarAsync(Cuenta, Jornada.Id, j => j.Finalizar(DateTimeOffset.UtcNow));
@@ -308,7 +309,7 @@ public sealed class HojaRutaViewModel : INotifyPropertyChanged
                 confirmaciones[confirmada.Id] = confirmada;
             }
         Reconciliar(Paradas, Hoja.Paradas.OrderBy(x => x.Orden).Select(ResumenParada).ToArray());
-        Reconciliar(Carga, Hoja.Paradas.Where(ParadaActiva).SelectMany(p => p.Bultos).Select(EstadoBulto).ToArray());
+        Reconciliar(Carga, Hoja.Paradas.Where(p => ParadaActiva(p) && !p.EsRetiro).SelectMany(p => p.Bultos.Where(b => b.Resultado == "Pendiente")).Select(EstadoBulto).ToArray());
         EstadoMapa = ParadasActivas == 0
             ? "No hay paradas activas; el recorrido no tiene marcadores para mostrar ni zona offline para descargar."
             : "El mapa muestra las paradas activas con coordenadas. La descarga offline es opcional.";
@@ -363,10 +364,11 @@ public sealed class HojaRutaViewModel : INotifyPropertyChanged
         while (actual.Count > deseado.Count) actual.RemoveAt(actual.Count - 1);
     }
     public string EstadoPresentado(ParadaRuta parada) =>
-        EntregaFisica(parada.EnvioId) && Estado(parada) is not ("Entregado" or "EntregaPendienteValidacion" or "EntregaSinValidacion")
+        EntregaFisica(parada.EnvioId) && Estado(parada) is not ("Entregado" or "EntregadoParcialmente" or "EntregaPendienteValidacion" or "EntregaSinValidacion" or "Retirado" or "RetiroEnDeposito" or "EntregadoComercio")
             ? "Entrega registrada · en revisión" : Estado(parada);
-    public bool EntregaFisica(Guid envio) => Jornada?.Operaciones.Any(o => o.EnvioId == envio && o.Tipo == TipoOperacionLocal.EntregaFisica) ?? false;
+    public bool EntregaFisica(Guid envio) => Jornada?.Operaciones.Any(o => o.EnvioId == envio && o.Tipo is TipoOperacionLocal.EntregaFisica or TipoOperacionLocal.EntregaBultos or TipoOperacionLocal.RetirarBultos) ?? false;
     public string Estado(ParadaRuta parada) => VistaParada.Obtener(parada, vistaRemota, confirmaciones.Values).Estado;
+    public BultoRuta[] BultosActuales(ParadaRuta parada) => vistaRemota?.Paradas.SingleOrDefault(p => p.EnvioId == parada.EnvioId)?.Bultos ?? parada.Bultos;
     public bool ParadaActiva(ParadaRuta parada) => VistaParada.Obtener(parada, vistaRemota, confirmaciones.Values).Activa;
     private async Task<bool> ConsultarCambios()
     {
@@ -445,7 +447,7 @@ public sealed class HojaRutaViewModel : INotifyPropertyChanged
     {
         var vista = VistaParada.Obtener(parada, vistaRemota, confirmaciones.Values);
         var real = vistaRemota?.Paradas.SingleOrDefault(p => p.EnvioId == parada.EnvioId && p.EnvioVersion >= vista.Version) ?? parada;
-        var estadoRuta = vista.Activa ? "Parada activa"
+        var estadoRuta = real.ResultadoVisita == "Completada" ? "Visita completada" : real.ResultadoVisita == "Retirada" ? "Retirada de esta ruta · " + vista.MotivoSuspension : real.ResultadoVisita == "CerradaSinResultado" ? "Visita cerrada sin resultado acreditado" : vista.Activa ? "Parada activa"
             : "Fuera de esta ruta" + (string.IsNullOrWhiteSpace(vista.MotivoSuspension) ? " · motivo no informado" : " · " + vista.MotivoSuspension);
         return new(parada.EnvioId, parada.Orden, parada.Destinatario, parada.Direccion, vista.Estado,
             TextoReparto.Bultos(real.Bultos.Length), estadoRuta, Custodia(real.Bultos));
@@ -502,7 +504,14 @@ public sealed class HojaRutaViewModel : INotifyPropertyChanged
     public IReadOnlyList<BultoRuta> BultosParaRendir()
     {
         var cargados = Cargados();
-        foreach (var p in Hoja.Paradas.Where(p => EntregaFisica(p.EnvioId))) foreach (var b in p.Bultos) cargados.Remove(b.Id);
+        if (Jornada is not null) foreach (var op in Jornada.Operaciones)
+        {
+            if (op.Tipo == TipoOperacionLocal.EntregaFisica)
+                foreach (var b in Hoja.Paradas.Single(p => p.EnvioId == op.EnvioId).Bultos) cargados.Remove(b.Id);
+            if (op.Tipo is TipoOperacionLocal.EntregaBultos or TipoOperacionLocal.RetirarBultos)
+                foreach (var b in op.Datos.Deserialize(DatosOperacionJson.Default.DatosOperacionMovil)!.ResultadosBultos ?? [])
+                    if (b.Entregado) { if (op.Tipo == TipoOperacionLocal.RetirarBultos) cargados.Add(b.BultoId); else cargados.Remove(b.BultoId); }
+        }
         if (Jornada is not null)
             foreach (var op in Jornada.Operaciones.Where(o => o.Tipo == TipoOperacionLocal.Rendicion
                 && (!confirmaciones.TryGetValue(o.Id, out var r) || r.Resultado == "Aplicada")))

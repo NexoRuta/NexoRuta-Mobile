@@ -2,6 +2,7 @@ namespace NexoRuta.Mobile.Core.Rutas;
 
 public sealed class ReglasEnvio
 {
+    public bool PermiteEntregaParcial { get; init; }
     public Guid VersionId { get; init; }
     public int NumeroVersion { get; init; }
     public int MaximoIntentos { get; init; }

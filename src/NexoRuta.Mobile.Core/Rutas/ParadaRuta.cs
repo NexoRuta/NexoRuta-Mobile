@@ -1,6 +1,8 @@
 namespace NexoRuta.Mobile.Core.Rutas;
 public sealed class ParadaRuta
 {
+    public bool EsRetiro { get; init; }
+    public string ResultadoVisita { get; init; } = "Pendiente";
     public Guid EnvioId { get; init; }
     public int Orden { get; init; }
     public bool Activa { get; init; }

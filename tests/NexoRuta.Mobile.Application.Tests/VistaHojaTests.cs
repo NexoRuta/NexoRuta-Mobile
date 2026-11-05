@@ -46,4 +46,15 @@ public sealed class VistaHojaTests
         Assert.Equal("0 bultos", VistaHoja.Crear(original, remota).Bultos);
         Assert.Equal("EnCurso", VistaHoja.Crear(original, remota).Estado);
     }
+    [Fact]
+    public void VisitaCompletadaNoSePresentaComoFueraDeRuta()
+    {
+        var hoja = new HojaRuta
+        {
+            Id = Guid.NewGuid(), Estado = "Finalizada",
+            Paradas = [new ParadaRuta { EnvioId = Guid.NewGuid(), Activa = false,
+                Estado = "EntregadoParcialmente", ResultadoVisita = "Completada" }]
+        };
+        Assert.Equal("0 activas · 1 completadas · 0 fuera de ruta", VistaHoja.Crear(hoja, null).Paradas);
+    }
 }
