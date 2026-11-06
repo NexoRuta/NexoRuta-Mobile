@@ -103,6 +103,8 @@ jobs:
         run: dotnet build src/NexoRuta.Mobile/NexoRuta.Mobile.csproj -t:InstallAndroidDependencies -f net10.0-android -p:RuntimeIdentifier=android-arm64 -p:AndroidSdkDirectory="$ANDROID_HOME" -p:JavaSdkDirectory="$JAVA_HOME" -p:AcceptAndroidSdkLicenses=true
       - name: Compilar APK Release de verificación
         run: dotnet build src/NexoRuta.Mobile/NexoRuta.Mobile.csproj --configuration Release --framework net10.0-android -p:RuntimeIdentifier=android-arm64 -p:AndroidPackageFormats=apk -p:AndroidR8JarPath="${{ steps.r8.outputs.jar }}" --no-restore
+      - name: Verificar restore de emulador x64
+        run: dotnet restore src/NexoRuta.Mobile/NexoRuta.Mobile.csproj --locked-mode --force -p:RuntimeIdentifier=android-x64
       - name: Verificar restore portable después de Android
         run: |
           for capa in Core Api Storage Application; do
