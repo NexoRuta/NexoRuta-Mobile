@@ -19,7 +19,7 @@ public sealed partial class SincronizadorJornadaTests
     {
         using var f = new Escenario(); await f.Preparar(cerrar: false, soloInicio: true, pruebaPendiente: true, enEstaRuta: enEstaRuta);
         await f.Datos.ModificarAsync(f.Cuenta, f.Jornada.Id, j => j.ConfirmarCarga(DateTimeOffset.UtcNow));
-        using var cliente = f.Cliente(async (r, ct) => Confirmar(JsonSerializer.Deserialize(await r.Content!.ReadAsByteArrayAsync(ct), ContratosRepartoJson.Default.SobreOperacion)!, f.Envio));
+        using var cliente = f.Cliente(async (r, ct) => Confirmar(JsonSerializer.Deserialize(await r.Content!.ReadAsByteArrayAsync(ct), ContratosRepartoJson.Default.SobreOperacion)!, f.Envio, f.Bulto));
         using var sync = new SincronizadorJornada(cliente, f.Datos, f.Archivos); await sync.SincronizarAsync(f.Cuenta, f.Jornada.Id);
         var hoja = SerializadorHojaRuta.Deserializar((await f.Datos.LeerHojaAsync(f.Cuenta, f.Jornada.RutaId))!, f.Cuenta);
         var io = new CapturaInterfaz(); var padre = new HojaRutaViewModel(hoja, f.Cuenta, f.Datos, new UnusedInteraction(), io, io); await padre.Refrescar();
@@ -37,7 +37,7 @@ public sealed partial class SincronizadorJornadaTests
         var offline = false;
         using var cliente = f.Cliente(async (r, ct) => {
             if (offline) throw new HttpRequestException("Offline controlado");
-            return Confirmar(JsonSerializer.Deserialize(await r.Content!.ReadAsByteArrayAsync(ct), ContratosRepartoJson.Default.SobreOperacion)!, f.Envio);
+            return Confirmar(JsonSerializer.Deserialize(await r.Content!.ReadAsByteArrayAsync(ct), ContratosRepartoJson.Default.SobreOperacion)!, f.Envio, f.Bulto);
         });
         using var sync = new SincronizadorJornada(cliente, f.Datos, f.Archivos);
         await sync.SincronizarAsync(f.Cuenta, f.Jornada.Id); offline = true;
@@ -75,7 +75,7 @@ public sealed partial class SincronizadorJornadaTests
         using var cliente = f.Cliente(async (r, ct) => {
             if (r.Method == HttpMethod.Put) return new(HttpStatusCode.NoContent);
             var op = JsonSerializer.Deserialize(await r.Content!.ReadAsByteArrayAsync(ct), ContratosRepartoJson.Default.SobreOperacion)!;
-            if (op.Tipo != "RetirarBultos") return Confirmar(op, f.Envio);
+            if (op.Tipo != "RetirarBultos") return Confirmar(op, f.Envio, f.Bulto);
             return Json(new ConfirmacionOperacion { Id = op.Id, Secuencia = op.Secuencia, Resultado = "Conflicto", Detalle = "El retiro excede la capacidad física actual del vehículo.", VersionRuta = op.Secuencia });
         });
         using var sync = new SincronizadorJornada(cliente, f.Datos, f.Archivos); await sync.SincronizarAsync(f.Cuenta, f.Jornada.Id);
@@ -129,11 +129,13 @@ public sealed partial class SincronizadorJornadaTests
     }
     private sealed class CapturaInterfaz : NexoRuta.Mobile.Captura.IInteraccionReparto, IVerificacionLocal
     {
-        public Task<bool> ConfirmarResolucionRetiroAsync() => Task.FromResult(true);
+        public bool ConfirmarResolucion { get; set; } = true;
+        public Queue<string?> Codigos { get; } = new();
+        public Task<bool> ConfirmarResolucionAsync(bool retiro) => Task.FromResult(ConfirmarResolucion);
         public Task<bool> VerificarAsync(string motivo, CancellationToken ct = default) => Task.FromResult(true);
         public Task<byte[]?> FotoAsync() => Task.FromResult<byte[]?>([1, 2, 3, 4]);
         public Task<byte[]?> FirmaAsync() => Task.FromResult<byte[]?>([5, 6, 7, 8]);
-        public Task<string?> EscanearAsync() => Task.FromResult<string?>(null);
+        public Task<string?> EscanearAsync() => Task.FromResult(Codigos.TryDequeue(out var codigo) ? codigo : null);
         public Task<Guid[]?> SeleccionarRendicionAsync(IReadOnlyList<BultoRuta> bultos) => Task.FromResult<Guid[]?>(null);
         public Task<bool> ConfirmarSalidaConDiferenciasAsync(int bultosPendientes, int paradasAfectadas) => Task.FromResult(true);
         public Task<bool> ConfirmarCierreAsync(bool pruebaPendiente, int bultosSinRendir) => Task.FromResult(true);

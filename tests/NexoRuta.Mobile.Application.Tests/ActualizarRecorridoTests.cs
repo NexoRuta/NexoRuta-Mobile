@@ -18,7 +18,7 @@ namespace NexoRuta.Mobile.Application.Tests
         {
             using var f = new Escenario(); await f.Preparar(cerrar: false, soloInicio: true, estadoServidor: "EnCurso", bloquearDiscrepanciasCarga: blockIncompleteLoad);
             using var cliente = f.Cliente(async (request, ct) => Confirmar(
-                JsonSerializer.Deserialize(await request.Content!.ReadAsByteArrayAsync(ct), ContratosRepartoJson.Default.SobreOperacion)!, f.Envio));
+                JsonSerializer.Deserialize(await request.Content!.ReadAsByteArrayAsync(ct), ContratosRepartoJson.Default.SobreOperacion)!, f.Envio, f.Bulto));
             using var sync = new SincronizadorJornada(cliente, f.Datos, f.Archivos);
             await sync.SincronizarAsync(f.Cuenta, f.Jornada.Id);
             var hoja = SerializadorHojaRuta.Deserializar((await f.Datos.LeerHojaAsync(f.Cuenta, f.Jornada.RutaId))!, f.Cuenta);
@@ -57,7 +57,7 @@ namespace NexoRuta.Mobile.Application.Tests
                     throw new HttpRequestException("Controlled disconnection");
                 }
                 var command = JsonSerializer.Deserialize(await request.Content!.ReadAsByteArrayAsync(ct), ContratosRepartoJson.Default.SobreOperacion)!;
-                return Confirmar(command, f.Envio);
+                return Confirmar(command, f.Envio, f.Bulto);
             });
             using var sync = new SincronizadorJornada(cliente, f.Datos, f.Archivos);
             var vm = new HojaRutaViewModel(hoja, f.Cuenta, f.Datos, new UnusedInteraction(), new UnusedInteraction(), new UnusedInteraction(), cliente, sync);
@@ -87,6 +87,36 @@ namespace NexoRuta.Mobile.Application.Tests
             Assert.False((await f.Datos.LeerAsync(f.Cuenta, initial.Id))!.TienePendientes);
         }
 
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task InvalidReceiptShowsRetryGuidanceWithoutExposingDiagnosticsOrConfirmingWork(bool refreshCommand)
+        {
+            using var f = new Escenario(); await f.Preparar(cerrar: false, soloInicio: true);
+            var initial = (await f.Datos.LeerAsync(f.Cuenta, f.Jornada.Id))!;
+            var hoja = SerializadorHojaRuta.Deserializar((await f.Datos.LeerHojaAsync(f.Cuenta, initial.RutaId))!, f.Cuenta);
+            using var cliente = f.Cliente((request, _) => request.Method == HttpMethod.Post
+                ? throw new InvalidDataException("Acuse=technical-id; secuencia=1; versionesAcuse=[NULL]")
+                : throw new HttpRequestException("Controlled remote-read failure"));
+            using var sync = new SincronizadorJornada(cliente, f.Datos, f.Archivos);
+            var vm = new HojaRutaViewModel(hoja, f.Cuenta, f.Datos, new UnusedInteraction(), new UnusedInteraction(), new UnusedInteraction(), cliente, sync);
+            await vm.Refrescar();
+            if (refreshCommand)
+            {
+                var completed = Completion(vm); vm.Sincronizar.Execute(null);
+                await completed.WaitAsync(TimeSpan.FromSeconds(5));
+            }
+            else Assert.False(await vm.IntentarSincronizar());
+            Assert.Equal("No pudimos actualizar. Conservamos tus datos. Reintent\u00e1 con Actualizar.", vm.Mensaje);
+            Assert.DoesNotContain("Acuse=", vm.Mensaje);
+            Assert.False(vm.Cerrada);
+            Assert.True(vm.Sincronizar.CanExecute(null));
+            var preserved = (await f.Datos.LeerAsync(f.Cuenta, initial.Id))!;
+            Assert.True(preserved.TienePendientes);
+            Assert.Equal(initial.Operaciones.Select(x => x.Id), preserved.Operaciones.Select(x => x.Id));
+            Assert.Empty(await f.Datos.LeerConfirmacionesAsync(f.Cuenta, initial.Id));
+        }
+
         private static Task Completion(HojaRutaViewModel vm)
         {
             var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -105,7 +135,7 @@ namespace NexoRuta.Mobile.Application.Tests
         {
             using var f = new Escenario(); await f.Preparar();
             using (var accepted = f.Cliente(async (request, ct) => Confirmar(
-                JsonSerializer.Deserialize(await request.Content!.ReadAsByteArrayAsync(ct), ContratosRepartoJson.Default.SobreOperacion)!, f.Envio)))
+                JsonSerializer.Deserialize(await request.Content!.ReadAsByteArrayAsync(ct), ContratosRepartoJson.Default.SobreOperacion)!, f.Envio, f.Bulto)))
             using (var sync = new SincronizadorJornada(accepted, f.Datos, f.Archivos))
                 await sync.SincronizarAsync(f.Cuenta, f.Jornada.Id);
             var hoja = SerializadorHojaRuta.Deserializar((await f.Datos.LeerHojaAsync(f.Cuenta, f.Jornada.RutaId))!, f.Cuenta);

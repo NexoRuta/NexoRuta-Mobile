@@ -290,7 +290,17 @@ public sealed class PrincipalViewModel : INotifyPropertyChanged
         var rutas = hojas.Select(bytes => SerializadorHojaRuta.Deserializar(bytes, cuenta)).ToDictionary(x => x.Id);
         foreach (var jornada in jornadas)
         {
-            var confirmaciones = (await datos.LeerConfirmacionesAsync(cuenta, jornada.Id))
+            var bytesConfirmaciones = await datos.LeerConfirmacionesAsync(cuenta, jornada.Id);
+            foreach (var bytes in bytesConfirmaciones)
+            {
+                using var documento = JsonDocument.Parse(bytes);
+                var raw = documento.RootElement;
+                var presente = raw.TryGetProperty("versionesBulto", out var versiones);
+                var campos = presente && versiones.ValueKind == JsonValueKind.Object ? versiones.EnumerateObject().ToArray() : [];
+                var valores = campos.Select(p => $"{p.Name}:{(p.Value.ValueKind == JsonValueKind.Number && p.Value.TryGetInt64(out var v) ? v.ToString(System.Globalization.CultureInfo.InvariantCulture) : "invalid")}");
+                RegistrarDiagnostico($"local_work.ack.id={raw.GetProperty("id").GetGuid():D};sequence={raw.GetProperty("secuencia").GetInt64()};parcel_versions_field={(presente ? versiones.ValueKind.ToString() : "absent")};parcel_versions_count={campos.Length};parcel_versions={string.Join(",", valores)}");
+            }
+            var confirmaciones = bytesConfirmaciones
                 .Select(bytes => JsonSerializer.Deserialize(bytes, ContratosRepartoJson.Default.ConfirmacionOperacion))
                 .Where(x => x is not null).Cast<ConfirmacionOperacion>().ToArray();
             var ruta = rutas.GetValueOrDefault(jornada.RutaId);

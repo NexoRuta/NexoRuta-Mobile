@@ -45,7 +45,7 @@ public sealed class EntregaViewModel : INotifyPropertyChanged
     public bool PuedeRegistrar => padre.Iniciada && padre.Salida && !padre.Cerrada && (padre.ParadaActiva(Parada) && !padre.EntregaFisica(Parada.EnvioId) && padre.BultosActuales(Parada).Any(b => b.Resultado == "Pendiente") || padre.BultosActuales(Parada).Any(b => b.Resultado == "EntregaPendienteValidacion" && b.EnEstaRuta)) && (!Parada.EsRetiro || padre.ConflictoRetiro(Parada.EnvioId) is null);
     private bool EntregaDeclarada => padre.EntregaFisica(Parada.EnvioId) || padre.BultosActuales(Parada).Any(b => b.Resultado == "EntregaPendienteValidacion" && b.EnEstaRuta);
     public bool MostrarIntento => PuedeRegistrar && !EntregaDeclarada;
-    public string AccionEntrega => Parada.EsRetiro ? "Confirmar retiro" : EntregaDeclarada ? "Completar entrega" : "Confirmar entrega";
+    public string AccionEntrega => Parada.EsRetiro ? "Confirmar retiro" : padre.ConflictoEntrega(Parada.EnvioId) is not null ? "Reintentar entrega" : EntregaDeclarada ? "Completar entrega" : "Confirmar entrega";
     public string FotoEstado => fotoId is null ? "Pendiente" : capturas.Any(x => x.Id == fotoId && !x.Lista) ? "Foto interrumpida; volvé a capturarla." : "Lista";
     public string FirmaEstado => firmaId is null ? "Pendiente" : capturas.Any(x => x.Id == firmaId && !x.Lista) ? "Firma interrumpida; volvé a capturarla." : "Lista";
     public bool QuitarFotoVisible => capturas.Any(x => x.Id == fotoId && x.OperacionId is null);
@@ -64,6 +64,7 @@ public sealed class EntregaViewModel : INotifyPropertyChanged
     {
         this.padre = padre; Parada = parada; this.datos = datos; this.evidencias = evidencias; this.interaccion = interaccion;
         foreach (var b in padre.BultosActuales(parada).Where(b => parada.EsRetiro || b.Resultado == "Pendiente" || b.Resultado == "EntregaPendienteValidacion" && b.EnEstaRuta)) Seleccion.Add(new(b, parada.Reglas.Motivos) { Escaneado = b.Resultado == "EntregaPendienteValidacion" });
+        foreach (var b in Seleccion) b.PropertyChanged += (_, _) => Cambiar(nameof(ResumenSeleccion));
         EscanearBulto = new(() => Ejecutar(async () =>
         {
             var codigo = await interaccion.EscanearAsync(); if (codigo is null) return;
@@ -81,6 +82,8 @@ public sealed class EntregaViewModel : INotifyPropertyChanged
             () => !Ocupado && QuitarFirmaVisible);
         Entregar = new(() => Ejecutar(async () =>
         {
+            var rechazo = padre.ConflictoEntrega(Parada.EnvioId);
+            if (rechazo is not null && !await interaccion.ConfirmarResolucionAsync(false)) return;
             if (capturas.Any(x => (x.Id == fotoId || x.Id == firmaId) && !x.Lista))
                 throw new InvalidOperationException("Recapturá o descartá los borradores interrumpidos antes de confirmar.");
             if (Parada.EsRetiro && (fotoId is null || firmaId is null)) throw new InvalidOperationException("El retiro requiere foto del estado y firma de quien entrega.");
@@ -92,6 +95,7 @@ public sealed class EntregaViewModel : INotifyPropertyChanged
             var ubicacion = await UbicacionActual();
             var prueba = new DatosOperacionMovil
             {
+                ResuelveOperacionId = rechazo?.Id,
                 ResultadosBultos = Seleccion.Where(b => !repetirPrueba || padre.BultosActuales(Parada).Any(actual => actual.Id == b.Bulto.Id && actual.Resultado == "EntregaPendienteValidacion" && actual.EnEstaRuta)).Select(b => new ResultadoBultoMovil(b.Bulto.Id, b.Bulto.Version, repetirPrueba || b.Escaneado, repetirPrueba ? null : b.Motivo?.Codigo)).ToArray(),
                 Nombre = Nombre, Documento = Documento, FotoId = fotoId, FirmaId = firmaId,
                 Latitud = ubicacion?.Latitude, Longitud = ubicacion?.Longitude,
@@ -121,7 +125,7 @@ public sealed class EntregaViewModel : INotifyPropertyChanged
         ReintentarRetiro = new(() => Ejecutar(async () =>
         {
             var conflicto = padre.ConflictoRetiro(Parada.EnvioId) ?? throw new InvalidOperationException("No existe un retiro rechazado para resolver.");
-            if (!await interaccion.ConfirmarResolucionRetiroAsync()) return;
+            if (!await interaccion.ConfirmarResolucionAsync(true)) return;
             var original = conflicto.Datos.Deserialize(DatosOperacionJson.Default.DatosOperacionMovil)!;
             var resolucion = new DatosOperacionMovil { ResuelveOperacionId = conflicto.Id, ResultadosBultos = original.ResultadosBultos,
                 FotoId = original.FotoId, FirmaId = original.FirmaId, Nombre = original.Nombre, Documento = original.Documento,
@@ -153,6 +157,8 @@ public sealed class EntregaViewModel : INotifyPropertyChanged
         await CargarCapturas();
         if (padre.ConflictoRetiro(Parada.EnvioId) is { } conflicto)
             Mensaje = padre.ResultadoOperacion(conflicto, "", "") + " Conservamos el hecho físico y sus pruebas. Coordiná con el depósito; cuando se resuelva la causa, usá Reintentar retiro.";
+        else if (padre.ConflictoEntrega(Parada.EnvioId) is { } rechazada)
+            Mensaje = padre.ResultadoOperacion(rechazada, "", "") + " Conservamos el registro y sus pruebas. Revisá los bultos y motivos; cuando se resuelva la causa, usá Reintentar entrega.";
     });
     private async Task CargarCapturas()
     {
@@ -210,8 +216,15 @@ public sealed class SeleccionBulto(BultoRuta bulto, MotivoNoEntrega[] motivos) :
     public BultoRuta Bulto { get; } = bulto;
     public MotivoNoEntrega[] Motivos { get; } = motivos;
     private bool escaneado;
-    public bool Escaneado { get => escaneado; set { escaneado = value; PropertyChanged?.Invoke(this, new(nameof(Estado))); } }
+    public bool Escaneado { get => escaneado; set { if (escaneado == value && (!value || motivo is null)) return; escaneado = value; if (value) motivo = null; Notificar(); } }
     public string Estado => Escaneado ? "Identificado por escaneo" : "Pendiente de escaneo";
-    public MotivoNoEntrega? Motivo { get; set; }
+    private MotivoNoEntrega? motivo;
+    public MotivoNoEntrega? Motivo { get => motivo; set { if (motivo == value && (value is null || !escaneado)) return; motivo = value; if (value is not null) escaneado = false; Notificar(); } }
+    private void Notificar()
+    {
+        PropertyChanged?.Invoke(this, new(nameof(Escaneado)));
+        PropertyChanged?.Invoke(this, new(nameof(Motivo)));
+        PropertyChanged?.Invoke(this, new(nameof(Estado)));
+    }
     public event PropertyChangedEventHandler? PropertyChanged;
 }

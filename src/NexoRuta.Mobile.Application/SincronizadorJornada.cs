@@ -11,6 +11,9 @@ public sealed class SincronizadorJornada(ClienteSesionMovil cliente, Repositorio
     RepositorioArchivosCifrados archivos) : IDisposable
 {
     private readonly SemaphoreSlim exclusividad = new(1, 1);
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<(CuentaMovil Cuenta, Guid Jornada, Guid Operacion), ConfirmacionOperacion> recuperadas = new();
+    public ConfirmacionOperacion? ObtenerConfirmacionRecuperada(CuentaMovil cuenta, Guid jornada, Guid operacion)
+        => recuperadas.GetValueOrDefault((cuenta, jornada, operacion));
     public async Task<int> SincronizarPendientesAsync(CuentaMovil cuenta, CancellationToken ct = default)
     {
         var total = 0;
@@ -34,10 +37,39 @@ public sealed class SincronizadorJornada(ClienteSesionMovil cliente, Repositorio
             var hoja = SerializadorHojaRuta.Deserializar(bytesHoja, cuenta);
             var versiones = hoja.Paradas.ToDictionary(x => x.EnvioId, x => x.EnvioVersion);
             var versionesBulto = hoja.Paradas.SelectMany(p => p.Bultos).ToDictionary(b => b.Id, b => b.Version);
+            var declarados = hoja.Paradas.SelectMany(p => p.Bultos).Where(b => b.Resultado != "Pendiente").Select(b => b.Id).ToHashSet();
             foreach (var bytes in await datos.LeerConfirmacionesAsync(cuenta, jornadaId, ct))
             {
-                var ack = Leer(bytes); ValidarBultos(ack, versionesBulto); AplicarVersiones(ack, versiones);
+                var ack = Leer(bytes);
+                var op = jornada.Operaciones.SingleOrDefault(o => o.Id == ack.Id && o.Secuencia == ack.Secuencia)
+                    ?? throw new InvalidDataException("El acuse local no corresponde al diario de esta jornada.");
+                var esperados = ack.Resultado == "Aplicada" ? BultosModificados(op, hoja, declarados) : [];
+                if (esperados.Any(id => !versionesBulto.ContainsKey(id)))
+                    throw new InvalidDataException("El diario contiene un bulto ajeno a la hoja; conservamos sus registros para revisión.");
+                Validar(ack, versiones); ValidarBultos(ack, versionesBulto);
+                if (ack.Resultado == "Aplicada" && esperados.Any(id => !ack.VersionesBulto.ContainsKey(id)))
+                {
+                    if (!recuperadas.TryGetValue((cuenta, jornadaId, op.Id), out var recuperada))
+                    {
+                        var sobreOriginal = await datos.LeerSobreAsync(cuenta, jornadaId, op.Id, ct)
+                            ?? throw new InvalidDataException("Falta el sobre original para recuperar el acuse de bultos. Conservá los datos y revisá la jornada.");
+                        // ponytail: historical truncated receipts replay once per process/operation; restart may replay again.
+                        // The server's existing identity/hash check owns idempotence. Neither durable bytes nor receipts change.
+                        recuperada = await cliente.EnviarOperacionAsync(cuenta, jornadaId, sobreOriginal, op.Id, jornada.CantidadPendientes, ct);
+                        Validar(recuperada, versiones); ValidarBultos(recuperada, versionesBulto);
+                        if (recuperada.Id != ack.Id || recuperada.Secuencia != ack.Secuencia || recuperada.Resultado != ack.Resultado
+                            || recuperada.VersionRuta != ack.VersionRuta || recuperada.VersionEnvio != ack.VersionEnvio
+                            || recuperada.VersionesEnvio.Count != ack.VersionesEnvio.Count || ack.VersionesEnvio.Any(v => recuperada.VersionesEnvio.GetValueOrDefault(v.Key, -1) != v.Value)
+                            || recuperada.EstadosEnvio.Count != ack.EstadosEnvio.Count || ack.EstadosEnvio.Any(v => recuperada.EstadosEnvio.GetValueOrDefault(v.Key) != v.Value)
+                            || esperados.Any(id => !recuperada.VersionesBulto.TryGetValue(id, out var v) || v <= versionesBulto[id]))
+                            throw new InvalidDataException("El acuse recuperado no confirma las versiones de bulto de la operación original. Conservá los datos y revisá la jornada.");
+                        recuperadas[(cuenta, jornadaId, op.Id)] = recuperada;
+                    }
+                    ack = recuperada;
+                }
+                AplicarVersiones(ack, versiones);
                 if (ack.Resultado == "Aplicada") foreach (var b in ack.VersionesBulto) versionesBulto[b.Key] = b.Value;
+                IncorporarHecho(ack, op, hoja, declarados);
             }
             var confirmadas = 0;
             while (confirmadas < 100)
@@ -76,15 +108,44 @@ public sealed class SincronizadorJornada(ClienteSesionMovil cliente, Repositorio
                 Validar(resultado, versiones); ValidarBultos(resultado, versionesBulto);
                 if (resultado.Id != pendiente.Id || resultado.Secuencia != pendiente.Secuencia)
                     throw new InvalidDataException("El servidor no confirmó la operación enviada.");
+                if (resultado.Resultado == "Aplicada" && BultosModificados(pendiente, hoja, declarados)
+                        .Any(id => !versionesBulto.ContainsKey(id) || !resultado.VersionesBulto.TryGetValue(id, out var v) || v <= versionesBulto[id]))
+                    throw new InvalidDataException("El acuse no confirma las versiones de los bultos modificados. Conservamos el sobre para reintentar la misma operación.");
                 var respuesta = JsonSerializer.SerializeToUtf8Bytes(resultado, ContratosRepartoJson.Default.ConfirmacionOperacion);
                 await datos.ConfirmarSobreAsync(cuenta, jornadaId, pendiente.Id, respuesta, ct);
                 AplicarVersiones(resultado, versiones);
                 if (resultado.Resultado == "Aplicada") foreach (var b in resultado.VersionesBulto) versionesBulto[b.Key] = b.Value;
+                IncorporarHecho(resultado, pendiente, hoja, declarados);
                 confirmadas++;
             }
             return confirmadas;
         }
         finally { exclusividad.Release(); }
+    }
+    private static Guid[] BultosModificados(OperacionLocal op, HojaRuta hoja, HashSet<Guid> declarados)
+    {
+        var d = op.Datos.Deserialize(DatosOperacionJson.Default.DatosOperacionMovil)!;
+        if (op.Tipo == TipoOperacionLocal.CargarBulto && d.BultoId is null
+            || op.Tipo == TipoOperacionLocal.Rendicion && d.BultoIds is not { Length: > 0 }
+            || op.Tipo is TipoOperacionLocal.EntregaBultos or TipoOperacionLocal.RetirarBultos && d.ResultadosBultos is not { Length: > 0 })
+            throw new InvalidDataException("El acuse aplicado no identifica los bultos de su operación; conservamos el diario para revisión.");
+        return op.Tipo switch
+        {
+            TipoOperacionLocal.CargarBulto => d.BultoId is { } id ? [id] : [],
+            TipoOperacionLocal.Rendicion => d.BultoIds ?? [],
+            TipoOperacionLocal.RetirarBultos => d.ResultadosBultos?.Select(b => b.BultoId).ToArray() ?? [],
+            TipoOperacionLocal.EntregaBultos => d.ResultadosBultos?.Where(b => !declarados.Contains(b.BultoId)).Select(b => b.BultoId).ToArray() ?? [],
+            TipoOperacionLocal.EntregaFisica => hoja.Paradas.Single(p => p.EnvioId == op.EnvioId).Bultos.Select(b => b.Id).ToArray(),
+            _ => []
+        };
+    }
+    private static void IncorporarHecho(ConfirmacionOperacion ack, OperacionLocal op, HojaRuta hoja, HashSet<Guid> declarados)
+    {
+        if (ack.Resultado != "Aplicada") return;
+        if (op.Tipo == TipoOperacionLocal.EntregaFisica)
+            declarados.UnionWith(hoja.Paradas.Single(p => p.EnvioId == op.EnvioId).Bultos.Select(b => b.Id));
+        else if (op.Tipo == TipoOperacionLocal.EntregaBultos)
+            declarados.UnionWith(op.Datos.Deserialize(DatosOperacionJson.Default.DatosOperacionMovil)!.ResultadosBultos?.Where(b => b.Entregado).Select(b => b.BultoId) ?? []);
     }
     private async Task SubirArchivos(CuentaMovil cuenta, Guid jornada, OperacionLocal op, CancellationToken ct)
     {
@@ -100,9 +161,15 @@ public sealed class SincronizadorJornada(ClienteSesionMovil cliente, Repositorio
     }
     private static void ValidarBultos(ConfirmacionOperacion r, Dictionary<Guid, long> versiones)
     {
-        if (r.VersionesBulto is null || r.VersionesBulto.Any(b => !versiones.ContainsKey(b.Key) || b.Value < 0)
+        if (r.VersionesBulto is null || r.VersionesBulto.Any(b => !versiones.ContainsKey(b.Key) || b.Value < 0
+                || r.Resultado == "Aplicada" && b.Value < versiones[b.Key])
             || r.Resultado == "Conflicto" && r.VersionesBulto.Count > 0)
-            throw new InvalidDataException("Las versiones de bulto confirmadas no corresponden a la hoja.");
+            throw new InvalidDataException(
+                $"Acuse={r.Id}; secuencia={r.Secuencia}; resultado={r.Resultado}; " +
+                $"bultosHoja=[{string.Join(",", versiones.Keys)}]; " +
+                $"versionesAcuse=[{(r.VersionesBulto is null
+                    ? "NULL"
+                    : string.Join(",", r.VersionesBulto.Select(b => $"{b.Key}:{b.Value}")))}]");
     }
     private static ConfirmacionOperacion Leer(byte[] bytes) => JsonSerializer.Deserialize(bytes, ContratosRepartoJson.Default.ConfirmacionOperacion)
         ?? throw new InvalidDataException("La confirmación local está vacía.");
