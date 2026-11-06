@@ -16,7 +16,7 @@ cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 R8_JAR="$(python3 tools/preparar-r8.py)"
 # file: evita exponer las contraseñas en argumentos, historial y logs de MSBuild.
 dotnet publish src/NexoRuta.Mobile/NexoRuta.Mobile.csproj -c Release -f net10.0-android \
-    -p:ValidarAlmacenamiento=false \
+    -p:ValidarAlmacenamiento=false -p:RestoreLockedMode=true \
     -p:RuntimeIdentifier=android-arm64 -p:AndroidPackageFormats=apk -p:AndroidKeyStore=true \
     -p:AndroidSigningKeyStore="$NEXORUTA_ANDROID_KEYSTORE" -p:AndroidSigningKeyAlias="$NEXORUTA_ANDROID_KEY_ALIAS" \
     -p:AndroidSigningStorePass="file:$NEXORUTA_ANDROID_STORE_PASS_FILE" -p:AndroidSigningKeyPass="file:$NEXORUTA_ANDROID_KEY_PASS_FILE" \

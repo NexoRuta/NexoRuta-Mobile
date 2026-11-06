@@ -92,12 +92,23 @@ jobs:
       - name: Preparar R8 requerido por Kotlin
         id: r8
         run: echo "jar=$(python3 tools/preparar-r8.py)" >> "$GITHUB_OUTPUT"
+      - name: Verificar restore portable antes de Android
+        run: |
+          for capa in Core Api Storage Application; do
+            dotnet restore "tests/NexoRuta.Mobile.$capa.Tests" --locked-mode
+          done
       - name: Restaurar Android con lockfile específico de RID
-        run: dotnet restore src/NexoRuta.Mobile/NexoRuta.Mobile.csproj --locked-mode -p:TargetFramework=net10.0-android -p:RuntimeIdentifier=android-arm64 -p:NuGetLockFilePath=packages.android.lock.json
+        run: dotnet restore src/NexoRuta.Mobile/NexoRuta.Mobile.csproj --locked-mode -p:RuntimeIdentifier=android-arm64
       - name: Dependencias Android
-        run: dotnet build src/NexoRuta.Mobile/NexoRuta.Mobile.csproj -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="$ANDROID_HOME" -p:JavaSdkDirectory="$JAVA_HOME" -p:AcceptAndroidSdkLicenses=true
+        run: dotnet build src/NexoRuta.Mobile/NexoRuta.Mobile.csproj -t:InstallAndroidDependencies -f net10.0-android -p:RuntimeIdentifier=android-arm64 -p:AndroidSdkDirectory="$ANDROID_HOME" -p:JavaSdkDirectory="$JAVA_HOME" -p:AcceptAndroidSdkLicenses=true
       - name: Compilar APK Release de verificación
         run: dotnet build src/NexoRuta.Mobile/NexoRuta.Mobile.csproj --configuration Release --framework net10.0-android -p:RuntimeIdentifier=android-arm64 -p:AndroidPackageFormats=apk -p:AndroidR8JarPath="${{ steps.r8.outputs.jar }}" --no-restore
+      - name: Verificar restore portable después de Android
+        run: |
+          for capa in Core Api Storage Application; do
+            dotnet restore "tests/NexoRuta.Mobile.$capa.Tests" --locked-mode --force
+          done
+          git diff --exit-code -- '**/packages*.lock.json'
       - name: Checksum del APK
         run: sha256sum src/NexoRuta.Mobile/bin/Release/net10.0-android/android-arm64/*-Signed.apk > SHA256SUMS
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

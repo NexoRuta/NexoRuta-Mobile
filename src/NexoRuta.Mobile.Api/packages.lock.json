@@ -11,7 +11,6 @@
       "nexoruta.mobile.core": {
         "type": "Project"
       }
-    },
-    "net10.0/android-x64": {}
+    }
   }
 }

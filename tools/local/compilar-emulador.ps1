@@ -27,7 +27,7 @@ try {
     # MSBuild imports environment properties. Do not put token values in argv, logs or tracked files.
     $env:NexoRutaMapboxPublicToken = $token
     & dotnet build (Join-Path $root 'mobile/src/NexoRuta.Mobile/NexoRuta.Mobile.csproj') -c Debug -f net10.0-android `
-        -p:RuntimeIdentifier=android-x64 -p:AndroidPackageFormats=apk -p:EmbedAssembliesIntoApk=true `
+        -p:RuntimeIdentifier=android-x64 -p:RestoreLockedMode=true -p:AndroidPackageFormats=apk -p:EmbedAssembliesIntoApk=true `
         "-p:AndroidR8JarPath=$r8" -p:NexoRutaBackendTarget=Docker "-p:NexoRutaAndroidDevelopmentCa=$ca" `
         --artifacts-path $ArtifactsDirectory --nologo -v minimal -m:1 -nr:false
     if ($LASTEXITCODE -ne 0) { throw "Android build failed (exit $LASTEXITCODE)." }
