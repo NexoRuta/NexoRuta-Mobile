@@ -99,10 +99,10 @@ jobs:
           echo "NexoRutaFirebaseAndroidConfig=$config_path" >> "$GITHUB_ENV"
 
       - name: Restore locked Android dependencies
-        run: dotnet restore src/NexoRuta.Mobile/NexoRuta.Mobile.csproj --locked-mode -p:TargetFramework=net10.0-android -p:RuntimeIdentifier=android-arm64 -p:NuGetLockFilePath=packages.android.lock.json
+        run: dotnet restore src/NexoRuta.Mobile/NexoRuta.Mobile.csproj --locked-mode -p:RuntimeIdentifier=android-arm64
 
       - name: Install Android dependencies
-        run: dotnet build src/NexoRuta.Mobile/NexoRuta.Mobile.csproj -t:InstallAndroidDependencies -f net10.0-android -p:AndroidSdkDirectory="$ANDROID_HOME" -p:JavaSdkDirectory="$JAVA_HOME" -p:AcceptAndroidSdkLicenses=true
+        run: dotnet build src/NexoRuta.Mobile/NexoRuta.Mobile.csproj -t:InstallAndroidDependencies -f net10.0-android -p:RuntimeIdentifier=android-arm64 -p:AndroidSdkDirectory="$ANDROID_HOME" -p:JavaSdkDirectory="$JAVA_HOME" -p:AcceptAndroidSdkLicenses=true
 
       - name: Prepare the stable development signing key
         env:

@@ -24,7 +24,7 @@
    <Label Text="{Binding ResumenSeleccion}" />
    <VerticalStackLayout BindableLayout.ItemsSource="{Binding Seleccion}"><BindableLayout.ItemTemplate><DataTemplate x:DataType="vm:SeleccionBulto"><VerticalStackLayout Spacing="8" Padding="0,8">
     <Label Text="{Binding Bulto.Codigo}" FontFamily="OpenSansSemibold" /><Label Text="{Binding Estado}" />
-    <Label Text="Motivo si queda pendiente" /><Picker Title="Seleccionar motivo del bulto" ItemsSource="{Binding Motivos}" ItemDisplayBinding="{Binding Descripcion}" SelectedItem="{Binding Motivo}" />
+    <Label Text="Motivo si queda pendiente (quita la selección de entrega)" /><Picker Title="Seleccionar motivo del bulto" ItemsSource="{Binding Motivos}" ItemDisplayBinding="{Binding Descripcion}" SelectedItem="{Binding Motivo}" />
    </VerticalStackLayout></DataTemplate></BindableLayout.ItemTemplate></VerticalStackLayout>
    <Label Text="¿Falta una prueba? Podés confirmar que entregaste el paquete y completarla antes de terminar tu jornada." Style="{StaticResource Caption}" />
    <Button Text="{Binding AccionEntrega}" Command="{Binding Entregar}" />

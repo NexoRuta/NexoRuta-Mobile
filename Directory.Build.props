@@ -1,0 +1,13 @@
+<Project>
+  <PropertyGroup>
+    <!-- Select the lock for the entire restore graph, including shared projects.
+         Android tooling and local builds must never rewrite portable locks. -->
+    <RuntimeIdentifier Condition="'$(MSBuildProjectName)' == 'NexoRuta.Mobile' and '$(RuntimeIdentifier)' == '' and '$(RuntimeIdentifiers)' == ''">android-arm64</RuntimeIdentifier>
+    <NexoRutaLockRid Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</NexoRutaLockRid>
+    <NexoRutaLockRid Condition="'$(NexoRutaLockRid)' == ''">$(RuntimeIdentifiers)</NexoRutaLockRid>
+    <NuGetLockFilePath Condition="'$(NexoRutaLockRid)' == 'android-arm64'">packages.android.lock.json</NuGetLockFilePath>
+    <NuGetLockFilePath Condition="'$(NexoRutaLockRid)' != '' and '$(NexoRutaLockRid)' != 'android-arm64'">packages.$(NexoRutaLockRid).lock.json</NuGetLockFilePath>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RestoreLockedMode>true</RestoreLockedMode>
+  </PropertyGroup>
+</Project>

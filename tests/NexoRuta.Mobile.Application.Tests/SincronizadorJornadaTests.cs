@@ -32,7 +32,7 @@ public sealed partial class SincronizadorJornadaTests
                 await Task.Delay(Timeout.Infinite, ct);
             }
             Assert.True(applied.Add(command.Id));
-            return Confirmar(command, f.Envio);
+            return Confirmar(command, f.Envio, f.Bulto);
         });
         using var sync = new SincronizadorJornada(cliente, f.Datos, f.Archivos);
         using var timeout = new CancellationTokenSource();
@@ -64,7 +64,7 @@ public sealed partial class SincronizadorJornadaTests
         using var cliente = f.Cliente(async (r, ct) =>
         {
             var comando = JsonSerializer.Deserialize(await r.Content!.ReadAsByteArrayAsync(ct), ContratosRepartoJson.Default.SobreOperacion)!;
-            secuencias.Add(comando.Secuencia); return Confirmar(comando, f.Envio);
+            secuencias.Add(comando.Secuencia); return Confirmar(comando, f.Envio, f.Bulto);
         });
         using var sync = new SincronizadorJornada(cliente, f.Datos, f.Archivos);
         Assert.Equal(110, await sync.SincronizarPendientesAsync(f.Cuenta));
@@ -91,7 +91,7 @@ public sealed partial class SincronizadorJornadaTests
                 Assert.Equal(3, comando.VersionEnvio);
                 if (perder) { perder = false; throw new HttpRequestException("Respuesta perdida tras el commit simulado"); }
             }
-            return Confirmar(comando, f.Envio);
+            return Confirmar(comando, f.Envio, f.Bulto);
         });
         using (var sync = new SincronizadorJornada(cliente, f.Datos, f.Archivos))
             await Assert.ThrowsAsync<HttpRequestException>(() => sync.SincronizarAsync(f.Cuenta, f.Jornada.Id));
@@ -114,7 +114,7 @@ public sealed partial class SincronizadorJornadaTests
         {
             solicitudes++;
             var comando = JsonSerializer.Deserialize(await request.Content!.ReadAsByteArrayAsync(ct), ContratosRepartoJson.Default.SobreOperacion)!;
-            if (comando.Tipo != "EntregaFisica") return Confirmar(comando, f.Envio);
+            if (comando.Tipo != "EntregaFisica") return Confirmar(comando, f.Envio, f.Bulto);
             return Json(new ConfirmacionOperacion { Id = comando.Id, Secuencia = comando.Secuencia, Resultado = "Conflicto",
                 VersionEnvio = 99, VersionRuta = 9, Detalle = "Reasignado en el servidor" });
         });
@@ -158,7 +158,7 @@ public sealed partial class SincronizadorJornadaTests
                 return new(HttpStatusCode.NoContent);
             }
             var op = JsonSerializer.Deserialize(await request.Content!.ReadAsByteArrayAsync(ct), ContratosRepartoJson.Default.SobreOperacion)!;
-            envios.Add(op.Tipo); return Confirmar(op, f.Envio);
+            envios.Add(op.Tipo); return Confirmar(op, f.Envio, f.Bulto);
         });
         using var sync = new SincronizadorJornada(cliente, f.Datos, f.Archivos);
         await Assert.ThrowsAsync<SesionMovilException>(() => sync.SincronizarAsync(f.Cuenta, f.Jornada.Id));
@@ -176,7 +176,7 @@ public sealed partial class SincronizadorJornadaTests
         {
             Interlocked.Increment(ref envios);
             var op = JsonSerializer.Deserialize(await request.Content!.ReadAsByteArrayAsync(ct), ContratosRepartoJson.Default.SobreOperacion)!;
-            return Confirmar(op, f.Envio);
+            return Confirmar(op, f.Envio, f.Bulto);
         });
         using var sync = new SincronizadorJornada(cliente, f.Datos, f.Archivos);
         var resultados = await Task.WhenAll(sync.SincronizarAsync(f.Cuenta, f.Jornada.Id), sync.SincronizarAsync(f.Cuenta, f.Jornada.Id));
@@ -237,7 +237,7 @@ public sealed partial class SincronizadorJornadaTests
                 intentos.Add(bytes);
                 if (perderRespuesta) { perderRespuesta = false; throw new HttpRequestException("Respuesta perdida tras aplicar"); }
             }
-            return Confirmar(op, f.Envio);
+            return Confirmar(op, f.Envio, f.Bulto);
         });
         using (var sync = new SincronizadorJornada(cliente, f.Datos, f.Archivos))
             await Assert.ThrowsAsync<HttpRequestException>(() => sync.SincronizarAsync(f.Cuenta, f.Jornada.Id));
@@ -250,10 +250,18 @@ public sealed partial class SincronizadorJornadaTests
         Assert.Equal(f.Foto, await archivos.LeerAsync(f.Cuenta, captura.Id));
     }
 
-    private static HttpResponseMessage Confirmar(SobreOperacion op, Guid envio) => Json(new ConfirmacionOperacion
+    private static HttpResponseMessage Confirmar(SobreOperacion op, Guid envio, Guid bulto) => Json(new ConfirmacionOperacion
     {
         Id = op.Id, Secuencia = op.Secuencia, Resultado = "Aplicada", VersionRuta = op.Secuencia,
         VersionEnvio = op.EnvioId is null ? null : op.Tipo == "EntregaFisica" ? 4 : 2,
+        VersionesBulto = op.Tipo switch
+        {
+            "CargarBulto" => new() { [op.Datos.GetProperty("bultoId").GetGuid()] = 1 },
+            "EntregaFisica" => new() { [bulto] = 3 },
+            "EntregaBultos" or "RetirarBultos" => op.Datos.GetProperty("resultadosBultos").EnumerateArray()
+                .ToDictionary(b => b.GetProperty("bultoId").GetGuid(), b => b.GetProperty("version").GetInt64() + 1),
+            _ => []
+        },
         VersionesEnvio = op.Tipo switch { "ConfirmarCarga" => new() { [envio] = 3 }, "EntregaFisica" => new() { [envio] = 4 }, _ => [] }
     });
     private static HttpResponseMessage Json(ConfirmacionOperacion respuesta) => new(HttpStatusCode.OK)

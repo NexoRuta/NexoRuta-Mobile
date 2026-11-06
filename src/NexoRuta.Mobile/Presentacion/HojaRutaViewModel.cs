@@ -306,7 +306,7 @@ public sealed class HojaRutaViewModel : INotifyPropertyChanged
             foreach (var bytes in await datos.LeerConfirmacionesAsync(Cuenta, Jornada.Id, ct))
             {
                 var confirmada = JsonSerializer.Deserialize(bytes, ContratosRepartoJson.Default.ConfirmacionOperacion)!;
-                confirmaciones[confirmada.Id] = confirmada;
+                confirmaciones[confirmada.Id] = sincronizador?.ObtenerConfirmacionRecuperada(Cuenta, Jornada.Id, confirmada.Id) ?? confirmada;
             }
         Reconciliar(Paradas, Hoja.Paradas.OrderBy(x => x.Orden).Select(ResumenParada).ToArray());
         Reconciliar(Carga, Hoja.Paradas.Where(p => ParadaActiva(p) && !p.EsRetiro).SelectMany(p => p.Bultos.Where(b => b.Resultado == "Pendiente")).Select(EstadoBulto).ToArray());
@@ -365,16 +365,26 @@ public sealed class HojaRutaViewModel : INotifyPropertyChanged
     }
     public string EstadoPresentado(ParadaRuta parada) =>
         ConflictoRetiro(parada.EnvioId) is not null ? "Retiro rechazado · requiere resolución" :
+        ConflictoEntrega(parada.EnvioId) is not null ? "Entrega rechazada · requiere resolución" :
         EntregaFisica(parada.EnvioId) && Estado(parada) is not ("Entregado" or "EntregadoParcialmente" or "EntregaPendienteValidacion" or "EntregaSinValidacion" or "Retirado" or "RetiroEnDeposito" or "EntregadoComercio")
             ? parada.EsRetiro ? "Retiro declarado · pendiente de confirmación" : "Entrega registrada · en revisión" : Estado(parada);
-    public bool EntregaFisica(Guid envio) => Jornada?.Operaciones.Any(o => o.EnvioId == envio && o.Tipo is TipoOperacionLocal.EntregaFisica or TipoOperacionLocal.EntregaBultos or TipoOperacionLocal.RetirarBultos) ?? false;
+    public bool EntregaFisica(Guid envio) => Jornada?.Operaciones.Any(o => o.EnvioId == envio
+        && o.Tipo is TipoOperacionLocal.EntregaFisica or TipoOperacionLocal.EntregaBultos or TipoOperacionLocal.RetirarBultos
+        && !OperacionRechazada(o)) ?? false;
     public string Estado(ParadaRuta parada) => VistaParada.Obtener(parada, vistaRemota, confirmaciones.Values).Estado;
     public OperacionLocal? ConflictoRetiro(Guid envio) => Jornada?.Operaciones.LastOrDefault(o => o.EnvioId == envio && o.Tipo == TipoOperacionLocal.RetirarBultos) is { } ultima
+        && confirmaciones.TryGetValue(ultima.Id, out var ack) && ack.Resultado == "Conflicto" ? ultima : null;
+    public OperacionLocal? ConflictoEntrega(Guid envio) => Jornada?.Operaciones.LastOrDefault(o => o.EnvioId == envio && o.Tipo == TipoOperacionLocal.EntregaBultos) is { } ultima
         && confirmaciones.TryGetValue(ultima.Id, out var ack) && ack.Resultado == "Conflicto" ? ultima : null;
     public bool OperacionRechazada(OperacionLocal operacion) => confirmaciones.TryGetValue(operacion.Id, out var ack) && ack.Resultado == "Conflicto";
     public BultoRuta[] BultosActuales(ParadaRuta parada)
     {
         var actuales = (vistaRemota?.Paradas.SingleOrDefault(p => p.EnvioId == parada.EnvioId)?.Bultos ?? parada.Bultos).ToDictionary(b => b.Id);
+        foreach (var ack in confirmaciones.Values.Where(a => a.Resultado == "Aplicada").OrderBy(a => a.Secuencia))
+            foreach (var (id, version) in ack.VersionesBulto)
+                if (actuales.TryGetValue(id, out var b) && version > b.Version)
+                    actuales[id] = new() { Id = b.Id, Codigo = b.Codigo, PesoGramos = b.PesoGramos, VolumenCm3 = b.VolumenCm3,
+                        EnEstaRuta = b.EnEstaRuta, Version = version, Custodia = b.Custodia, Resultado = b.Resultado };
         foreach (var op in Jornada?.Operaciones.Where(o => o.EnvioId == parada.EnvioId && o.Tipo == TipoOperacionLocal.EntregaBultos) ?? [])
         {
             if (OperacionRechazada(op)) continue;
@@ -383,7 +393,8 @@ public sealed class HojaRutaViewModel : INotifyPropertyChanged
             {
                 if (!r.Entregado || !actuales.TryGetValue(r.BultoId, out var b)) continue;
                 // A server projection at a newer parcel version wins over the local journal.
-                if (confirmaciones.TryGetValue(op.Id, out var ack) && ack.VersionesBulto.TryGetValue(b.Id, out var version) && b.Version >= version) continue;
+                if (confirmaciones.TryGetValue(op.Id, out var ack) && ack.VersionesBulto.TryGetValue(b.Id, out var version)
+                    && vistaRemota?.Paradas.SingleOrDefault(p => p.EnvioId == parada.EnvioId)?.Bultos.SingleOrDefault(p => p.Id == b.Id)?.Version >= version) continue;
                 if (b.Resultado is not ("Pendiente" or "EntregaPendienteValidacion")) continue;
                 actuales[b.Id] = new() { Id = b.Id, Codigo = b.Codigo, PesoGramos = b.PesoGramos, VolumenCm3 = b.VolumenCm3,
                     EnEstaRuta = true, Version = b.Version, Custodia = b.Custodia, Resultado = PruebaLocalCompleta(d, parada.Reglas)
@@ -559,7 +570,16 @@ public sealed class HojaRutaViewModel : INotifyPropertyChanged
                     : EstadoJornada().TieneRechazos ? "Hay operaciones rechazadas por el servidor. Revis\u00e1 el detalle antes de continuar."
                     : Cerrada ? "Cierre confirmado por el servidor." : "Recorrido actualizado.";
         }
-        catch (Exception) { falloSincronizacion = true; Mensaje = "No pudimos actualizar. Conservamos tus datos. Reintent\u00e1 con Actualizar."; }
+        catch (Exception ex)
+        {
+        #if ANDROID
+            global::Android.Util.Log.Error("NexoRuta.Sync", ex.ToString());
+        #else
+            global::System.Diagnostics.Trace.TraceError(ex.ToString());
+        #endif
+            falloSincronizacion = true;
+            Mensaje = "No pudimos actualizar. Conservamos tus datos. Reintentá con Actualizar.";
+        }
         finally { Sincronizando = false; }
     }
     public async Task<bool> IntentarSincronizar()
@@ -571,6 +591,16 @@ public sealed class HojaRutaViewModel : INotifyPropertyChanged
         try { await sincronizador.SincronizarAsync(Cuenta, Jornada.Id, limite.Token); }
         catch (OperationCanceledException) { falloSincronizacion = true; Mensaje = "Se agot\u00f3 el tiempo de actualizaci\u00f3n. Tus operaciones siguen guardadas. Reintent\u00e1 con Actualizar."; }
         catch (SesionMovilException ex) { falloSincronizacion = true; Mensaje = ex.Message + " Las operaciones pendientes siguen guardadas."; }
+        catch (InvalidDataException ex)
+        {
+        #if ANDROID
+            global::Android.Util.Log.Error("NexoRuta.Sync", ex.ToString());
+        #else
+            global::System.Diagnostics.Trace.TraceError(ex.ToString());
+        #endif
+            falloSincronizacion = true;
+            Mensaje = "No pudimos actualizar. Conservamos tus datos. Reintentá con Actualizar.";
+        }
         catch (HttpRequestException) { falloSincronizacion = true; Mensaje = "No pudimos conectar. Tus operaciones siguen guardadas. Reintent\u00e1 con Actualizar."; }
         if (!await ConsultarCambios())
         {
