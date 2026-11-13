@@ -31,7 +31,7 @@ if ((Invoke-Checked $Adb @('-s', $Serial, 'get-state')) -ne 'device') { throw "E
 if ((Invoke-Checked $Adb @('-s', $Serial, 'shell', 'getprop', 'sys.boot_completed')).Trim() -ne '1') { throw 'Wait for Android to finish booting.' }
 Invoke-Checked 'docker' @('info', '--format', '{{.ServerVersion}}') | Out-Null
 Invoke-Checked 'docker' @('network', 'inspect', $network, '--format', '{{.Driver}}') | Out-Null
-if ((Invoke-WebRequest 'http://localhost:5000/health/ready' -UseBasicParsing -TimeoutSec 10).StatusCode -ne 200) {
+if ((Invoke-WebRequest 'http://localhost:5000/ready' -UseBasicParsing -TimeoutSec 10).StatusCode -ne 200) {
     throw 'The usual API localhost:5000 is not ready. This script never starts another API.'
 }
 
@@ -83,7 +83,7 @@ import ssl, sys, time, urllib.request
 context = ssl.create_default_context(cafile=sys.argv[1])
 for attempt in range(15):
     try:
-        with urllib.request.urlopen('https://localhost:5843/health/ready', context=context, timeout=5) as response:
+        with urllib.request.urlopen('https://localhost:5843/ready', context=context, timeout=5) as response:
             if response.status != 200:
                 raise OSError(f'HTTP {response.status}')
         break

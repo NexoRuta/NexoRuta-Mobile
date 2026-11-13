@@ -26,7 +26,7 @@ public sealed partial class ClienteSesionMovilTests
         var original = almacen.Estado;
         using var cliente = Crear(almacen, (request, ct) =>
         {
-            Assert.Equal(new Uri(Api, "health/ready"), request.RequestUri);
+            Assert.Equal(new Uri(Api, "ready"), request.RequestUri);
             Assert.Equal(HttpMethod.Get, request.Method);
             Assert.Null(request.Headers.Authorization);
             Assert.Null(request.Content);

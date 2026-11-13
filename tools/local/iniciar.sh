@@ -12,5 +12,5 @@ compose=(docker compose --env-file "$root/.local/mobile/local.env" -f "$root/mob
 "${compose[@]}" --profile preparacion run --rm runtime-roles
 "${compose[@]}" --profile preparacion run --rm bootstrap
 "${compose[@]}" up -d --wait api https worker
-curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 1 --cacert "$root/.local/mobile/tls/ca.crt" https://localhost:5843/health/ready
+curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 1 --cacert "$root/.local/mobile/tls/ca.crt" https://localhost:5843/ready
 printf '\nAPI HTTPS local lista. Correo de prueba: http://localhost:5855\n'

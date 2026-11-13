@@ -24,7 +24,7 @@ def pedir(path, method='GET', body=None, token=None):
         content = response.read()
         return response.status, json.loads(content) if content and response.headers.get_content_type() == 'application/json' else None
 
-status, _ = pedir('/health/ready')
+status, _ = pedir('/ready')
 assert status == 200
 status, session = pedir('/api/auth/login', 'POST', {'email': config['UsuarioEmail'], 'password': config['UsuarioPassword']})
 assert status == 200

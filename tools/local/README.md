@@ -18,7 +18,7 @@ mobile/tools/local/iniciar.sh
 Comprobar HTTPS sin desactivar validación:
 
 ```bash
-curl --cacert .local/mobile/tls/ca.crt https://localhost:5843/health/ready
+curl --cacert .local/mobile/tls/ca.crt https://localhost:5843/ready
 ```
 
 Prueba integrada de API, outbox/RabbitMQ, correo en Mailpit y cancelación pública:
@@ -62,7 +62,7 @@ powershell -NoProfile -File mobile/tools/local/reconectar-emulador.ps1 -Serial e
 
 Usar el serial del emulador elegido, siempre explícito. El script comprueba la API, inicia/reutiliza únicamente su gateway identificado en la red existente `nexoruta_default`, valida CA/SAN mediante el contexto SSL estándar de Python (igual que los helpers locales existentes), restablece `adb -s SERIAL reverse tcp:5843 tcp:5843` y puede repetirse después de reiniciar Android. Rechaza seriales de teléfonos y contenedores/puertos/montajes ajenos; no los elimina. No inicia ni borra un AVD.
 
-`-ProbeApp` abre **NexoRuta Repartidor** y ejecuta un GET de solo lectura a `/health/ready` con el mismo `ClienteSesionMovil` y transporte TLS que usa la app. Solo existe en **Debug + CA local**, se activa mediante un identificador de prueba explícito, no inicia sesión ni renueva tokens ni modifica operaciones offline. Un HTTP200 demuestra conectividad, no autenticación. Sin `-ProbeApp`, el helper solo prepara gateway y reverse.
+`-ProbeApp` abre **NexoRuta Repartidor** y ejecuta un GET de solo lectura a `/ready` con el mismo `ClienteSesionMovil` y transporte TLS que usa la app. Solo existe en **Debug + CA local**, se activa mediante un identificador de prueba explícito, no inicia sesión ni renueva tokens ni modifica operaciones offline. Un HTTP200 demuestra conectividad, no autenticación. Sin `-ProbeApp`, el helper solo prepara gateway y reverse.
 
 Logs:
 
