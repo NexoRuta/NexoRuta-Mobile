@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
+using Microsoft.Extensions.Logging;
 using NexoRuta.Mobile.Core.Jornadas;
 
 namespace NexoRuta.Mobile.Api.Identidad;
@@ -15,10 +16,12 @@ public sealed partial class ClienteSesionMovil : IDisposable
     private readonly IAlmacenSesionMovil almacen;
     private readonly TimeProvider reloj;
     private readonly Action<string>? registrarDiagnostico;
+    private readonly ILogger<ClienteSesionMovil>? logger;
     private readonly SemaphoreSlim exclusividad = new(1, 1);
 
     public ClienteSesionMovil(Uri api, IAlmacenSesionMovil almacen,
-        HttpMessageHandler? transporte = null, TimeProvider? reloj = null, Action<string>? registrarDiagnostico = null)
+        HttpMessageHandler? transporte = null, TimeProvider? reloj = null, Action<string>? registrarDiagnostico = null,
+        ILogger<ClienteSesionMovil>? logger = null)
     {
         if (!api.IsAbsoluteUri || api.Scheme != Uri.UriSchemeHttps || api.UserInfo.Length != 0
             || api.Query.Length != 0 || api.Fragment.Length != 0 || api.AbsolutePath != "/")
@@ -27,6 +30,7 @@ public sealed partial class ClienteSesionMovil : IDisposable
         this.almacen = almacen;
         this.reloj = reloj ?? TimeProvider.System;
         this.registrarDiagnostico = registrarDiagnostico;
+        this.logger = logger;
         http = new HttpClient(transporte ?? new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false })
         {
             Timeout = TimeSpan.FromSeconds(30),

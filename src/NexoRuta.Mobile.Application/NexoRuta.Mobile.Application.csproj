@@ -4,5 +4,6 @@
     <ProjectReference Include="../NexoRuta.Mobile.Core/NexoRuta.Mobile.Core.csproj" />
     <ProjectReference Include="../NexoRuta.Mobile.Api/NexoRuta.Mobile.Api.csproj" />
     <ProjectReference Include="../NexoRuta.Mobile.Storage/NexoRuta.Mobile.Storage.csproj" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
   </ItemGroup>
 </Project>

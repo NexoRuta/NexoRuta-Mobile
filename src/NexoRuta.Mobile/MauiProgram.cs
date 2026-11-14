@@ -1,4 +1,8 @@
 ﻿using Microsoft.Extensions.Logging;
+using System.Globalization;
+using Serilog;
+using Serilog.Events;
+using Serilog.Formatting.Json;
 using CommunityToolkit.Maui;
 using ZXing.Net.Maui.Controls;
 using Indiko.Maui.Controls.MapBox;
@@ -15,6 +19,17 @@ public static class MauiProgram
 {
 	public static MauiApp CreateMauiApp()
 	{
+        var samplingText = Environment.GetEnvironmentVariable("NEXORUTA_OTEL_SAMPLING_RATIO");
+#if DEBUG
+        var defaultSamplingRatio = 1d;
+#else
+        var defaultSamplingRatio = 0.1d;
+#endif
+        var samplingRatio = string.IsNullOrWhiteSpace(samplingText) ? defaultSamplingRatio
+            : double.TryParse(samplingText, NumberStyles.Float, CultureInfo.InvariantCulture, out var configuredRatio)
+                ? configuredRatio
+                : throw new InvalidOperationException("NEXORUTA_OTEL_SAMPLING_RATIO must be a decimal between 0 and 1.");
+        TelemetryMovil.Configure(samplingRatio);
         var cultura = System.Globalization.CultureInfo.GetCultureInfo("es-UY");
         System.Globalization.CultureInfo.DefaultThreadCurrentCulture = cultura;
         System.Globalization.CultureInfo.DefaultThreadCurrentUICulture = cultura;
@@ -29,7 +44,8 @@ public static class MauiProgram
         if (configuracion.Api is { } api)
         {
             builder.Services.AddSingleton(s => new ClienteSesionMovil(api, s.GetRequiredService<IAlmacenSesionMovil>(),
-                registrarDiagnostico: registrarDiagnostico));
+                registrarDiagnostico: registrarDiagnostico,
+                logger: s.GetRequiredService<ILogger<ClienteSesionMovil>>()));
             builder.Services.AddSingleton<NexoRuta.Mobile.Application.SincronizadorJornada>();
             builder.Services.AddSingleton<NexoRuta.Mobile.Application.ServicioAvisosReparto>();
             builder.Services.AddSingleton<NexoRuta.Mobile.Application.ServicioSesionTrabajo>();
@@ -61,9 +77,20 @@ public static class MauiProgram
 				fonts.AddFont("OpenSans-Semibold.ttf", "OpenSansSemibold");
 			});
 
-#if DEBUG
-		builder.Logging.AddDebug();
-#endif
+		var rutaLogs = Path.Combine(FileSystem.AppDataDirectory, "logs");
+		Directory.CreateDirectory(rutaLogs);
+		var logger = new LoggerConfiguration()
+			.MinimumLevel.Information()
+			.MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+			.Enrich.FromLogContext()
+			.Enrich.WithProperty("service", "NexoRuta.Mobile")
+			.Enrich.With<MobileActivityLogEnricher>()
+			.WriteTo.File(new JsonFormatter(renderMessage: true), Path.Combine(rutaLogs, "nexoruta-.json"),
+				rollingInterval: RollingInterval.Day, fileSizeLimitBytes: 4 * 1024 * 1024,
+				rollOnFileSizeLimit: true, retainedFileCountLimit: 7, flushToDiskInterval: TimeSpan.FromSeconds(2))
+			.CreateLogger();
+		builder.Logging.ClearProviders();
+		builder.Logging.AddSerilog(logger, dispose: true);
 
 		builder.Services.AddSingleton<IAlmacenClavesProtegidas, AlmacenClavesProtegidas>();
 		builder.Services.AddSingleton<IAlmacenSesionMovil, AlmacenSesionProtegida>();

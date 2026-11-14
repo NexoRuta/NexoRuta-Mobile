@@ -184,7 +184,7 @@ public sealed partial class RepositorioJornadasSqlite(string raiz, IAlmacenClave
             using var tx = db.BeginTransaction();
             using var version = Comando(db, tx, "PRAGMA user_version");
             var numero = Convert.ToInt32(await version.ExecuteScalarAsync(ct));
-            if (numero is not (0 or 1)) throw new InvalidOperationException("La base local tiene una versión no soportada. No se modificó.");
+            if (numero is not (0 or 1 or 2)) throw new InvalidOperationException("La base local tiene una versión no soportada. No se modificó.");
             if (numero == 0)
             {
                 using var crear = Comando(db, tx, """
@@ -192,15 +192,20 @@ public sealed partial class RepositorioJornadasSqlite(string raiz, IAlmacenClave
                     CREATE TABLE Jornadas(Id TEXT PRIMARY KEY NOT NULL, Estado BLOB NOT NULL, Cerrada INTEGER NOT NULL);
                     CREATE TABLE Hojas(Id TEXT PRIMARY KEY NOT NULL, Datos BLOB NOT NULL);
                     CREATE TABLE Comandos(Id TEXT PRIMARY KEY NOT NULL, JornadaId TEXT NOT NULL REFERENCES Jornadas(Id),
-                        Secuencia INTEGER NOT NULL, Sobre BLOB NOT NULL, Respuesta BLOB NULL, UNIQUE(JornadaId, Secuencia));
+                        Secuencia INTEGER NOT NULL, Sobre BLOB NOT NULL, Respuesta BLOB NULL, TraceParent TEXT NULL, UNIQUE(JornadaId, Secuencia));
                     CREATE TABLE Capturas(Id TEXT PRIMARY KEY NOT NULL, JornadaId TEXT NOT NULL REFERENCES Jornadas(Id),
                         EnvioId TEXT NOT NULL, Tipo TEXT NOT NULL, Lista INTEGER NOT NULL DEFAULT 0, OperacionId TEXT NULL, Descartada INTEGER NOT NULL DEFAULT 0);
                     CREATE TABLE Metadatos(Clave TEXT PRIMARY KEY NOT NULL, Datos BLOB NOT NULL);
                     CREATE TABLE HojasRemotas(Id TEXT PRIMARY KEY NOT NULL, Version INTEGER NOT NULL, Datos BLOB NOT NULL);
                     INSERT INTO Cuenta(Identidad) VALUES($cuenta);
-                    PRAGMA user_version=1;
+                    PRAGMA user_version=2;
                     """, ("$cuenta", identidad));
                 await crear.ExecuteNonQueryAsync(ct);
+            }
+            else if (numero == 1)
+            {
+                using var migrar = Comando(db, tx, "ALTER TABLE Comandos ADD COLUMN TraceParent TEXT NULL; PRAGMA user_version=2;");
+                await migrar.ExecuteNonQueryAsync(ct);
             }
             using var propietario = Comando(db, tx, "SELECT Identidad FROM Cuenta");
             if ((string?)await propietario.ExecuteScalarAsync(ct) != identidad)

@@ -186,6 +186,32 @@ public sealed class RepositorioJornadasSqliteTests : IDisposable
     }
 
     [Fact]
+    public async Task TraceParentYSecuenciaDeSyncSeConservanCifradosTrasReapertura()
+    {
+        const string traceParent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+        var jornada = Nueva();
+        var operacion = jornada.Operaciones[0];
+        Guid installationId;
+        using (var db = new RepositorioJornadasSqlite(raiz, claves))
+        {
+            await db.CrearAsync(jornada);
+            await db.GuardarSobreAsync(Cuenta, jornada.Id, operacion.Id, "{}"u8.ToArray());
+            Assert.Equal(traceParent, await db.GuardarTraceParentSiAusenteAsync(Cuenta, jornada.Id, operacion.Id, traceParent));
+            var firstReport = await db.SiguienteReporteSyncAsync(Cuenta);
+            installationId = firstReport.InstallationId;
+            Assert.Equal(1, firstReport.Sequence);
+        }
+
+        using var reabierto = new RepositorioJornadasSqlite(raiz, claves);
+        Assert.Equal(traceParent, await reabierto.LeerTraceParentAsync(Cuenta, jornada.Id, operacion.Id));
+        Assert.Equal(traceParent, await reabierto.GuardarTraceParentSiAusenteAsync(Cuenta, jornada.Id, operacion.Id,
+            "00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-00"));
+        var siguiente = await reabierto.SiguienteReporteSyncAsync(Cuenta);
+        Assert.Equal(installationId, siguiente.InstallationId);
+        Assert.Equal(2, siguiente.Sequence);
+    }
+
+    [Fact]
     public async Task CierreNoSePreparaSinConfirmarLasOperacionesPreviasNiSeConfirmaSinSobreDurable()
     {
         var jornada = Nueva(); var cierre = jornada.Finalizar(Ahora.AddHours(8));

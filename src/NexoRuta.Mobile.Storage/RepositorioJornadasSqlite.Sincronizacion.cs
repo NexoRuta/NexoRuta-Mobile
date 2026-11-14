@@ -1,8 +1,101 @@
 using NexoRuta.Mobile.Core.Jornadas;
+using System.Diagnostics;
+using System.Text;
+using Microsoft.Data.Sqlite;
 namespace NexoRuta.Mobile.Storage;
 
 public sealed partial class RepositorioJornadasSqlite
 {
+    public async Task<string?> LeerTraceParentAsync(CuentaMovil cuenta, Guid jornada, Guid operacion, CancellationToken ct = default)
+    {
+        await acceso.WaitAsync(ct);
+        try
+        {
+            await using var db = await AbrirAsync(cuenta, ct);
+            using var command = Comando(db, null, "SELECT TraceParent FROM Comandos WHERE JornadaId=$j AND Id=$id",
+                ("$j", jornada.ToString()), ("$id", operacion.ToString()));
+            var value = await command.ExecuteScalarAsync(ct) as string;
+            if (value is not null && !ActivityContext.TryParse(value, traceState: null, out _))
+                throw new InvalidDataException("El diario local contiene un contexto W3C inválido; se conservó el dato para revisión.");
+            return value;
+        }
+        finally { acceso.Release(); }
+    }
+
+    public async Task<string> GuardarTraceParentSiAusenteAsync(CuentaMovil cuenta, Guid jornada, Guid operacion,
+        string traceParent, CancellationToken ct = default)
+    {
+        if (!ActivityContext.TryParse(traceParent, traceState: null, out _))
+            throw new ArgumentException("El contexto W3C no es válido.", nameof(traceParent));
+        await acceso.WaitAsync(ct);
+        try
+        {
+            await using var db = await AbrirAsync(cuenta, ct);
+            using var tx = db.BeginTransaction();
+            using var update = Comando(db, tx,
+                "UPDATE Comandos SET TraceParent=$trace WHERE JornadaId=$j AND Id=$id AND TraceParent IS NULL",
+                ("$trace", traceParent), ("$j", jornada.ToString()), ("$id", operacion.ToString()));
+            var changed = await update.ExecuteNonQueryAsync(ct);
+            using var read = Comando(db, tx, "SELECT TraceParent FROM Comandos WHERE JornadaId=$j AND Id=$id",
+                ("$j", jornada.ToString()), ("$id", operacion.ToString()));
+            var persisted = await read.ExecuteScalarAsync(ct) as string
+                ?? throw new InvalidOperationException("No existe el comando durable para asociar su contexto de traza.");
+            if (!ActivityContext.TryParse(persisted, traceState: null, out _))
+                throw new InvalidDataException("El diario local contiene un contexto W3C inválido; se conservó el dato para revisión.");
+            if (changed == 0 && persisted != traceParent)
+            {
+                // A concurrent retry already fixed the context. Its immutable parent wins.
+            }
+            tx.Commit();
+            return persisted;
+        }
+        finally { acceso.Release(); }
+    }
+
+    public async Task<(Guid InstallationId, long Sequence)> SiguienteReporteSyncAsync(CuentaMovil cuenta, CancellationToken ct = default)
+    {
+        const string installationKey = "sync.installation_id";
+        const string sequenceKey = "sync.report_sequence";
+        await acceso.WaitAsync(ct);
+        try
+        {
+            await using var db = await AbrirAsync(cuenta, ct);
+            using var tx = db.BeginTransaction();
+            var installationText = await LeerMetadata(db, tx, installationKey, ct);
+            Guid installationId;
+            if (installationText is null)
+            {
+                installationId = Guid.NewGuid();
+                await GuardarMetadata(db, tx, installationKey, installationId.ToString("D"), ct);
+            }
+            else if (!Guid.TryParse(installationText, out installationId) || installationId == Guid.Empty)
+                throw new InvalidDataException("La identidad local de sincronización no es válida.");
+
+            var sequenceText = await LeerMetadata(db, tx, sequenceKey, ct);
+            var current = sequenceText is null ? 0L : long.TryParse(sequenceText, out var parsed) && parsed >= 0
+                ? parsed : throw new InvalidDataException("La secuencia local de sincronización no es válida.");
+            var next = checked(current + 1);
+            await GuardarMetadata(db, tx, sequenceKey, next.ToString(System.Globalization.CultureInfo.InvariantCulture), ct);
+            tx.Commit();
+            return (installationId, next);
+        }
+        finally { acceso.Release(); }
+
+        static async Task<string?> LeerMetadata(SqliteConnection db, SqliteTransaction tx, string key, CancellationToken token)
+        {
+            using var command = Comando(db, tx, "SELECT Datos FROM Metadatos WHERE Clave=$key", ("$key", key));
+            return await command.ExecuteScalarAsync(token) is byte[] bytes ? Encoding.UTF8.GetString(bytes) : null;
+        }
+
+        static async Task GuardarMetadata(SqliteConnection db, SqliteTransaction tx, string key, string value, CancellationToken token)
+        {
+            using var command = Comando(db, tx,
+                "INSERT INTO Metadatos(Clave,Datos) VALUES($key,$value) ON CONFLICT(Clave) DO UPDATE SET Datos=excluded.Datos",
+                ("$key", key), ("$value", Encoding.UTF8.GetBytes(value)));
+            await command.ExecuteNonQueryAsync(token);
+        }
+    }
+
     public async Task<byte[]?> LeerSobreAsync(CuentaMovil cuenta, Guid jornada, Guid operacion, CancellationToken ct = default)
     {
         await acceso.WaitAsync(ct);

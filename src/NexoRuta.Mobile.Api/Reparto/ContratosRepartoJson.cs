@@ -4,4 +4,5 @@ namespace NexoRuta.Mobile.Api.Reparto;
 [JsonSerializable(typeof(SobreOperacion))]
 [JsonSerializable(typeof(ConfirmacionOperacion))]
 [JsonSerializable(typeof(EvidenciaRequest))]
+[JsonSerializable(typeof(EstadoSincronizacionMovilRequest))]
 public partial class ContratosRepartoJson : JsonSerializerContext;

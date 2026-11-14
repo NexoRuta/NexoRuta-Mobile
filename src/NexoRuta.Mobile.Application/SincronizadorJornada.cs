@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using NexoRuta.Mobile.Api.Identidad;
 using NexoRuta.Mobile.Api.Reparto;
 using NexoRuta.Mobile.Core.Jornadas;
@@ -8,7 +9,7 @@ using NexoRuta.Mobile.Storage;
 namespace NexoRuta.Mobile.Application;
 
 public sealed class SincronizadorJornada(ClienteSesionMovil cliente, RepositorioJornadasSqlite datos,
-    RepositorioArchivosCifrados archivos) : IDisposable
+    RepositorioArchivosCifrados archivos, ILogger<SincronizadorJornada>? logger = null) : IDisposable
 {
     private readonly SemaphoreSlim exclusividad = new(1, 1);
     private readonly System.Collections.Concurrent.ConcurrentDictionary<(CuentaMovil Cuenta, Guid Jornada, Guid Operacion), ConfirmacionOperacion> recuperadas = new();
@@ -17,14 +18,20 @@ public sealed class SincronizadorJornada(ClienteSesionMovil cliente, Repositorio
     public async Task<int> SincronizarPendientesAsync(CuentaMovil cuenta, CancellationToken ct = default)
     {
         var total = 0;
-        foreach (var jornada in await datos.LeerJornadasAsync(cuenta, ct))
-            while ((await datos.LeerAsync(cuenta, jornada.Id, ct))!.TienePendientes)
-            {
-                var enviados = await SincronizarAsync(cuenta, jornada.Id, ct);
-                total += enviados;
-                if (enviados == 0) break;
-            }
-        return total;
+        await ReportarEstadoAsync(cuenta);
+        try
+        {
+            var jornadas = await datos.LeerJornadasAsync(cuenta, ct);
+            foreach (var jornada in jornadas)
+                while ((await datos.LeerAsync(cuenta, jornada.Id, ct))!.TienePendientes)
+                {
+                    var enviados = await SincronizarAsync(cuenta, jornada.Id, ct);
+                    total += enviados;
+                    if (enviados == 0) break;
+                }
+            return total;
+        }
+        finally { await ReportarEstadoAsync(cuenta); }
     }
     public async Task<int> SincronizarAsync(CuentaMovil cuenta, Guid jornadaId, CancellationToken ct = default)
     {
@@ -32,6 +39,9 @@ public sealed class SincronizadorJornada(ClienteSesionMovil cliente, Repositorio
         try
         {
             if (await cliente.ObtenerCuentaLocalAsync(ct) != cuenta) throw new InvalidOperationException("La sesión no corresponde a la cuenta de la jornada.");
+            await ReportarEstadoAsync(cuenta);
+            try
+            {
             var jornada = await datos.LeerAsync(cuenta, jornadaId, ct) ?? throw new InvalidOperationException("No existe la jornada local.");
             var bytesHoja = await datos.LeerHojaAsync(cuenta, jornada.RutaId, ct) ?? throw new InvalidDataException("No existe la hoja descargada de esta jornada.");
             var hoja = SerializadorHojaRuta.Deserializar(bytesHoja, cuenta);
@@ -55,7 +65,8 @@ public sealed class SincronizadorJornada(ClienteSesionMovil cliente, Repositorio
                             ?? throw new InvalidDataException("Falta el sobre original para recuperar el acuse de bultos. Conservá los datos y revisá la jornada.");
                         // ponytail: historical truncated receipts replay once per process/operation; restart may replay again.
                         // The server's existing identity/hash check owns idempotence. Neither durable bytes nor receipts change.
-                        recuperada = await cliente.EnviarOperacionAsync(cuenta, jornadaId, sobreOriginal, op.Id, jornada.CantidadPendientes, ct);
+                        var traceParent = await ObtenerTraceParentAsync(cuenta, jornadaId, op.Id, ct);
+                        recuperada = await cliente.EnviarOperacionAsync(cuenta, jornadaId, sobreOriginal, op.Id, traceParent, jornada.CantidadPendientes, ct);
                         Validar(recuperada, versiones); ValidarBultos(recuperada, versionesBulto);
                         if (recuperada.Id != ack.Id || recuperada.Secuencia != ack.Secuencia || recuperada.Resultado != ack.Resultado
                             || recuperada.VersionRuta != ack.VersionRuta || recuperada.VersionEnvio != ack.VersionEnvio
@@ -102,9 +113,17 @@ public sealed class SincronizadorJornada(ClienteSesionMovil cliente, Repositorio
                     }, ContratosRepartoJson.Default.SobreOperacion);
                     await datos.GuardarSobreAsync(cuenta, jornadaId, pendiente.Id, sobre, ct);
                 }
-                await SubirArchivos(cuenta, jornadaId, pendiente, ct);
+                var operationTraceParent = await ObtenerTraceParentAsync(cuenta, jornadaId, pendiente.Id, ct);
+                using var operationScope = logger?.BeginScope(new Dictionary<string, object?>
+                {
+                    ["correlation_id"] = pendiente.Id.ToString("D"),
+                    ["mobile_operation_id"] = pendiente.Id.ToString("D"),
+                    ["journey_id"] = jornadaId.ToString("D")
+                });
+                logger?.LogInformation("Mobile operation is queued for synchronization.");
+                await SubirArchivos(cuenta, jornadaId, pendiente, operationTraceParent, ct);
                 var resultado = await cliente.EnviarOperacionAsync(
-                    cuenta, jornadaId, sobre, pendiente.Id, jornada.CantidadPendientes, ct);
+                    cuenta, jornadaId, sobre, pendiente.Id, operationTraceParent, jornada.CantidadPendientes, ct);
                 Validar(resultado, versiones); ValidarBultos(resultado, versionesBulto);
                 if (resultado.Id != pendiente.Id || resultado.Secuencia != pendiente.Secuencia)
                     throw new InvalidDataException("El servidor no confirmó la operación enviada.");
@@ -119,6 +138,11 @@ public sealed class SincronizadorJornada(ClienteSesionMovil cliente, Repositorio
                 confirmadas++;
             }
             return confirmadas;
+            }
+            finally
+            {
+                await ReportarEstadoAsync(cuenta);
+            }
         }
         finally { exclusividad.Release(); }
     }
@@ -147,7 +171,7 @@ public sealed class SincronizadorJornada(ClienteSesionMovil cliente, Repositorio
         else if (op.Tipo == TipoOperacionLocal.EntregaBultos)
             declarados.UnionWith(op.Datos.Deserialize(DatosOperacionJson.Default.DatosOperacionMovil)!.ResultadosBultos?.Where(b => b.Entregado).Select(b => b.BultoId) ?? []);
     }
-    private async Task SubirArchivos(CuentaMovil cuenta, Guid jornada, OperacionLocal op, CancellationToken ct)
+    private async Task SubirArchivos(CuentaMovil cuenta, Guid jornada, OperacionLocal op, string traceParent, CancellationToken ct)
     {
         if (op.EnvioId is not { } envio) return;
         foreach (var (campo, tipo) in new[] { ("fotoId", "Foto"), ("firmaId", "Firma") })
@@ -155,8 +179,34 @@ public sealed class SincronizadorJornada(ClienteSesionMovil cliente, Repositorio
             if (!op.Datos.TryGetProperty(campo, out var valor) || valor.ValueKind == JsonValueKind.Null) continue;
             if (!valor.TryGetGuid(out var id) || id == Guid.Empty) throw new InvalidDataException("La evidencia local no tiene un identificador válido.");
             var contenido = await archivos.LeerAsync(cuenta, id, ct);
-            try { await cliente.SubirEvidenciaAsync(cuenta, jornada, envio, id, tipo, contenido, ct); }
+            try { await cliente.SubirEvidenciaAsync(cuenta, jornada, envio, id, op.Id, traceParent, tipo, contenido, ct); }
             finally { CryptographicOperations.ZeroMemory(contenido); }
+        }
+    }
+
+    private async Task<string> ObtenerTraceParentAsync(CuentaMovil cuenta, Guid jornada, Guid operacion, CancellationToken ct)
+    {
+        var actual = await datos.LeerTraceParentAsync(cuenta, jornada, operacion, ct);
+        return actual ?? await datos.GuardarTraceParentSiAusenteAsync(cuenta, jornada, operacion,
+            TelemetryMovil.CrearContextoOperacion(), ct);
+    }
+
+    private async Task ReportarEstadoAsync(CuentaMovil cuenta)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        var cancellationToken = timeout.Token;
+        try
+        {
+            var pendientes = 0;
+            foreach (var jornada in await datos.LeerJornadasAsync(cuenta, cancellationToken))
+                pendientes = checked(pendientes + jornada.CantidadPendientes);
+            var identity = await datos.SiguienteReporteSyncAsync(cuenta, cancellationToken);
+            await cliente.ReportarEstadoSincronizacionAsync(cuenta,
+                new(identity.InstallationId, identity.Sequence, pendientes), timeout.Token);
+        }
+        catch (Exception error)
+        {
+            logger?.LogDebug("Mobile synchronization status report was not delivered. ErrorType: {ErrorType}", error.GetType().Name);
         }
     }
     private static void ValidarBultos(ConfirmacionOperacion r, Dictionary<Guid, long> versiones)

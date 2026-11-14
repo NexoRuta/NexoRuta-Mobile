@@ -1,4 +1,5 @@
 using System.Net;
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using NexoRuta.Mobile.Api.Identidad;
@@ -106,12 +107,45 @@ public sealed partial class SincronizadorJornadaTests
     }
 
     [Fact]
+    public async Task ReintentosConservanTraceIdYGeneranSpanHttpNuevo()
+    {
+        using var f = new Escenario(); await f.Preparar(cerrar: false, soloInicio: true);
+        var traceParents = new List<string>();
+        var operationAttempts = 0;
+        using var cliente = f.Cliente(async (request, ct) =>
+        {
+            Assert.Equal("/api/mobile/jornadas/" + f.Jornada.Id.ToString("D") + "/operaciones", request.RequestUri!.AbsolutePath);
+            traceParents.Add(Assert.Single(request.Headers.GetValues("traceparent")));
+            if (Interlocked.Increment(ref operationAttempts) == 1) throw new HttpRequestException("Controlled lost response");
+            var sobre = JsonSerializer.Deserialize(await request.Content!.ReadAsByteArrayAsync(ct), ContratosRepartoJson.Default.SobreOperacion)!;
+            return Confirmar(sobre, f.Envio, f.Bulto);
+        });
+        using var sync = new SincronizadorJornada(cliente, f.Datos, f.Archivos);
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => sync.SincronizarAsync(f.Cuenta, f.Jornada.Id));
+        Assert.Equal(1, await sync.SincronizarAsync(f.Cuenta, f.Jornada.Id));
+
+        Assert.Equal(2, traceParents.Count);
+        Assert.All(traceParents, parent => Assert.True(ActivityContext.TryParse(parent, null, out _)));
+        Assert.True(ActivityContext.TryParse(traceParents[0], null, out var first));
+        Assert.True(ActivityContext.TryParse(traceParents[1], null, out var second));
+        Assert.Equal(first.TraceId, second.TraceId);
+        Assert.NotEqual(first.SpanId, second.SpanId);
+        var operation = (await f.Datos.LeerAsync(f.Cuenta, f.Jornada.Id))!.Operaciones[0];
+        var persisted = await f.Datos.LeerTraceParentAsync(f.Cuenta, f.Jornada.Id, operation.Id);
+        Assert.True(ActivityContext.TryParse(persisted, null, out var root));
+        Assert.Equal(root.TraceId, first.TraceId);
+    }
+
+    [Fact]
     public async Task ConflictoSeConfirmaComoHechoDurableSinPromoverSuVersionRemota()
     {
         using var f = new Escenario(); await f.Preparar();
         var solicitudes = 0;
         using var cliente = f.Cliente(async (request, ct) =>
         {
+            if (request.RequestUri!.AbsolutePath == "/api/mobile/sync-status")
+                return new HttpResponseMessage(HttpStatusCode.NoContent);
             solicitudes++;
             var comando = JsonSerializer.Deserialize(await request.Content!.ReadAsByteArrayAsync(ct), ContratosRepartoJson.Default.SobreOperacion)!;
             if (comando.Tipo != "EntregaFisica") return Confirmar(comando, f.Envio, f.Bulto);
@@ -304,7 +338,10 @@ public sealed partial class SincronizadorJornadaTests
         internal ClienteSesionMovil Cliente(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> responder) =>
             new(new Uri("https://api.example.test/"), new Almacen(new() { Api = "https://api.example.test/", Cuenta = Cuenta,
                 Tokens = new() { AccessToken = "jwt-de-prueba", TokenType = "Bearer", RefreshToken = new string('a', 43),
-                    SesionId = Guid.NewGuid(), ExpiresAtUtc = DateTimeOffset.UtcNow.AddHours(1), RefreshExpiresAtUtc = DateTimeOffset.UtcNow.AddDays(30) } }), new Transporte(responder));
+                    SesionId = Guid.NewGuid(), ExpiresAtUtc = DateTimeOffset.UtcNow.AddHours(1), RefreshExpiresAtUtc = DateTimeOffset.UtcNow.AddDays(30) } }),
+                new Transporte((request, ct) => request.RequestUri?.AbsolutePath == "/api/mobile/sync-status"
+                    ? Task.FromResult(new HttpResponseMessage(HttpStatusCode.NoContent))
+                    : responder(request, ct)));
         public void Dispose() { Datos.Dispose(); Archivos.Dispose(); if (Directory.Exists(Raiz)) Directory.Delete(Raiz, true); }
     }
     private static JsonElement Elemento(string json) { using var documento = JsonDocument.Parse(json); return documento.RootElement.Clone(); }

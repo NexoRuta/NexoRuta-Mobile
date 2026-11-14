@@ -145,8 +145,10 @@ public sealed class AvisosRepartoTests
         var otra = new CuentaMovil(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
         await Assert.ThrowsAsync<SesionMovilException>(() => cliente.ObtenerAvisoAsync(otra, f.Aviso.Id));
         await Assert.ThrowsAsync<SesionMovilException>(() => cliente.ConfirmarAvisoAsync(otra, f.Aviso.Id, "Confirmado"));
-        await Assert.ThrowsAsync<SesionMovilException>(() => cliente.EnviarOperacionAsync(otra, f.Jornada, Encoding.UTF8.GetBytes("{}"), Guid.NewGuid(), 0));
-        await Assert.ThrowsAsync<SesionMovilException>(() => cliente.SubirEvidenciaAsync(otra, f.Jornada, f.Aviso.EnvioId, Guid.NewGuid(), "Foto", [1]));
+        var operationId = Guid.NewGuid();
+        var traceParent = TelemetryMovil.CrearContextoOperacion();
+        await Assert.ThrowsAsync<SesionMovilException>(() => cliente.EnviarOperacionAsync(otra, f.Jornada, Encoding.UTF8.GetBytes("{}"), operationId, traceParent, 0));
+        await Assert.ThrowsAsync<SesionMovilException>(() => cliente.SubirEvidenciaAsync(otra, f.Jornada, f.Aviso.EnvioId, Guid.NewGuid(), operationId, traceParent, "Foto", [1]));
     }
 
     [Fact]
@@ -187,7 +189,10 @@ public sealed class AvisosRepartoTests
         internal ClienteSesionMovil Cliente(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> responder) =>
             new(new Uri("https://api.example.test/"), new Almacen(new() { Api = "https://api.example.test/", Cuenta = Cuenta,
                 Tokens = new() { AccessToken = "jwt-de-prueba", TokenType = "Bearer", RefreshToken = new string('a', 43),
-                    SesionId = Guid.NewGuid(), ExpiresAtUtc = DateTimeOffset.UtcNow.AddHours(1), RefreshExpiresAtUtc = DateTimeOffset.UtcNow.AddDays(30) } }), new Transporte(responder));
+                    SesionId = Guid.NewGuid(), ExpiresAtUtc = DateTimeOffset.UtcNow.AddHours(1), RefreshExpiresAtUtc = DateTimeOffset.UtcNow.AddDays(30) } }),
+                new Transporte((request, ct) => request.RequestUri?.AbsolutePath == "/api/mobile/sync-status"
+                    ? Task.FromResult(new HttpResponseMessage(HttpStatusCode.NoContent))
+                    : responder(request, ct)));
         public void Dispose() { Datos.Dispose(); if (Directory.Exists(Raiz)) Directory.Delete(Raiz, true); }
     }
     private sealed class Almacen(EstadoSesionMovil? estado) : IAlmacenSesionMovil
