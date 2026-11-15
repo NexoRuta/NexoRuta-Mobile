@@ -12,6 +12,7 @@ on:
       - 'global.json'
       - 'src/**'
       - 'tools/preparar-r8.py'
+      - 'tools/validar-firebase-android.py'
       - '**/packages*.lock.json'
   workflow_dispatch:
 
@@ -30,6 +31,7 @@ jobs:
     timeout-minutes: 25
     env:
       NEXORUTA_GCP_API_ORIGIN: ${{ vars.NEXORUTA_GCP_API_ORIGIN }}
+      NEXORUTA_FIREBASE_ANDROID_PROJECT_ID: ${{ vars.NEXORUTA_FIREBASE_ANDROID_PROJECT_ID }}
       NEXORUTA_MAPBOX_PUBLIC_TOKEN: ${{ vars.NEXORUTA_MAPBOX_PUBLIC_TOKEN }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -56,6 +58,7 @@ jobs:
         run: |
           python3 - <<'PY'
           import os
+          import re
           from urllib.parse import urlsplit
 
           origin = os.environ.get('NEXORUTA_GCP_API_ORIGIN', '')
@@ -69,6 +72,11 @@ jobs:
           if not mapbox_token.startswith('pk.'):
               raise SystemExit('Configure the repository variable NEXORUTA_MAPBOX_PUBLIC_TOKEN with a public Mapbox token starting with pk.')
           print('Mapbox public token: configured')
+
+          firebase_project_id = os.environ.get('NEXORUTA_FIREBASE_ANDROID_PROJECT_ID', '')
+          if not re.fullmatch(r'[a-z][a-z0-9-]{4,28}[a-z0-9]', firebase_project_id):
+              raise SystemExit('Configure NEXORUTA_FIREBASE_ANDROID_PROJECT_ID with the Firebase project ID used by the backend.')
+          print('Firebase Android project ID: configured')
           PY
 
       - name: Prepare Firebase Android configuration
@@ -83,19 +91,9 @@ jobs:
           umask 077
           config_path="$RUNNER_TEMP/google-services.json"
           printf '%s' "$FIREBASE_ANDROID_CONFIG_BASE64" | base64 --decode > "$config_path"
-          python3 - "$config_path" <<'PY'
-          import json
-          import sys
-
-          with open(sys.argv[1], encoding='utf-8') as config_file:
-              config = json.load(config_file)
-          packages = {
-              client.get('client_info', {}).get('android_client_info', {}).get('package_name')
-              for client in config.get('client', [])
-          }
-          if 'uy.nexoruta.repartidor' not in packages:
-              raise SystemExit('Firebase configuration must include the Android app uy.nexoruta.repartidor.')
-          PY
+          python3 tools/validar-firebase-android.py \
+            --config "$config_path" \
+            --project-id "$NEXORUTA_FIREBASE_ANDROID_PROJECT_ID"
           echo "NexoRutaFirebaseAndroidConfig=$config_path" >> "$GITHUB_ENV"
 
       - name: Restore locked Android dependencies

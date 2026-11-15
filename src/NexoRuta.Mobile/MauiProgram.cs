@@ -10,6 +10,7 @@ using NexoRuta.Mobile.Presentacion;
 using NexoRuta.Mobile.Almacenamiento;
 using NexoRuta.Mobile.Storage;
 using NexoRuta.Mobile.Api.Identidad;
+using NexoRuta.Mobile.Application.Notificaciones;
 using NexoRuta.Mobile.Core.Identidad;
 using NexoRuta.Mobile.Seguridad;
 
@@ -48,13 +49,25 @@ public static class MauiProgram
                 logger: s.GetRequiredService<ILogger<ClienteSesionMovil>>()));
             builder.Services.AddSingleton<NexoRuta.Mobile.Application.SincronizadorJornada>();
             builder.Services.AddSingleton<NexoRuta.Mobile.Application.ServicioAvisosReparto>();
+            builder.Services.AddSingleton<IRegistroInstalacionPush, RegistroInstalacionPushApi>();
             builder.Services.AddSingleton<NexoRuta.Mobile.Application.ServicioSesionTrabajo>();
             builder.Services.AddSingleton<NexoRuta.Mobile.Application.ServicioHojasRuta>();
             builder.Services.AddSingleton<SincronizacionConectividad>();
         }
         if (!string.IsNullOrEmpty(configuracion.MapboxToken)) builder.UseMapbox(configuracion.MapboxToken, enableTelemetry: false);
         builder.Services.AddSingleton<PrincipalViewModel>();
-        builder.Services.AddSingleton<Notificaciones.IRegistroPush, Notificaciones.RegistroPushPlataforma>();
+        builder.Services.AddSingleton<IRegistroPush, Notificaciones.RegistroPushPlataforma>();
+        builder.Services.AddSingleton<IAlmacenFidPush, Notificaciones.AlmacenFidPushMaui>();
+        builder.Services.AddSingleton<ServicioRegistroPush>(s => new ServicioRegistroPush(
+            s.GetRequiredService<IRegistroPush>(),
+            s.GetRequiredService<IAlmacenFidPush>(),
+            s.GetService<IRegistroInstalacionPush>(),
+#if ANDROID
+            "Android",
+#else
+            "iOS",
+#endif
+            s.GetRequiredService<ILogger<ServicioRegistroPush>>()));
         builder.Services.AddSingleton<Notificaciones.ControlNotificaciones>();
         builder.Services.AddSingleton<MainPage>();
         builder.Services.AddSingleton<Captura.IInteraccionReparto, Captura.InteraccionReparto>();

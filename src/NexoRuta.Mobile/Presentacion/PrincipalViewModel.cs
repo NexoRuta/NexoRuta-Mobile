@@ -69,6 +69,7 @@ public sealed class PrincipalViewModel : INotifyPropertyChanged
         this.cliente = cliente;
         this.notificaciones = notificaciones;
         this.seguimiento = seguimiento;
+        notificaciones.EstadoCambiado += NotificacionesEstadoCambiado;
         CerrarSesion = new(() => Ejecutar(async () =>
         {
             try { await salida!.CerrarAsync(Cuenta); }
@@ -276,6 +277,9 @@ public sealed class PrincipalViewModel : INotifyPropertyChanged
         CerrarSesion?.Actualizar();
     }
     private void Cambiar([CallerMemberName] string? nombre = null) => PropertyChanged?.Invoke(this, new(nombre));
+
+    private void NotificacionesEstadoCambiado()
+        => MainThread.BeginInvokeOnMainThread(() => Cambiar(nameof(EstadoAvisos)));
 
     private static void RegistrarDiagnostico(string evento)
     {

@@ -101,6 +101,8 @@ Con el entorno Android cargado y el S21 ya autorizado en `adb devices`:
 
 ```bash
 adb reverse tcp:5843 tcp:5843
+export NEXORUTA_FIREBASE_ANDROID_PROJECT_ID=proyecto-firebase-del-backend
+python3 mobile/tools/validar-firebase-android.py --config "$PWD/mobile/google-services.json" --project-id "$NEXORUTA_FIREBASE_ANDROID_PROJECT_ID"
 R8_JAR="$(python3 mobile/tools/preparar-r8.py)"
 dotnet build mobile/src/NexoRuta.Mobile/NexoRuta.Mobile.csproj -c Release -f net10.0-android \
   -p:RuntimeIdentifier=android-arm64 -p:AndroidPackageFormats=apk \

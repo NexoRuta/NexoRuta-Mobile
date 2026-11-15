@@ -8,11 +8,15 @@ cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 : "${NEXORUTA_ANDROID_KEY_PASS_FILE:?Indicá el archivo privado con la contraseña de la clave.}"
 : "${NEXORUTA_GCP_API_ORIGIN:?Indicá el origen HTTPS público actual del backend GCP.}"
 : "${NEXORUTA_FIREBASE_ANDROID_CONFIG:?Indicá google-services.json fuera de Git.}"
+: "${NEXORUTA_FIREBASE_ANDROID_PROJECT_ID:?Indicá el project ID Firebase del backend.}"
 : "${NEXORUTA_MAPBOX_PUBLIC_TOKEN:?Indicá el token público propio para preparar el mapa offline obligatorio.}"
 [[ $NEXORUTA_MAPBOX_PUBLIC_TOKEN == pk.* ]] || { echo 'El mapa requiere un token público Mapbox (pk.).' >&2; exit 2; }
 [[ -f $NEXORUTA_ANDROID_KEYSTORE && -f $NEXORUTA_ANDROID_STORE_PASS_FILE && -f $NEXORUTA_ANDROID_KEY_PASS_FILE && -f $NEXORUTA_FIREBASE_ANDROID_CONFIG ]] || {
     echo 'Falta un archivo de firma o configuración.' >&2; exit 2;
 }
+python3 tools/validar-firebase-android.py \
+    --config "$NEXORUTA_FIREBASE_ANDROID_CONFIG" \
+    --project-id "$NEXORUTA_FIREBASE_ANDROID_PROJECT_ID"
 R8_JAR="$(python3 tools/preparar-r8.py)"
 # file: evita exponer las contraseñas en argumentos, historial y logs de MSBuild.
 dotnet publish src/NexoRuta.Mobile/NexoRuta.Mobile.csproj -c Release -f net10.0-android \

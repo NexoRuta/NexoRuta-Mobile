@@ -2,6 +2,7 @@ using NexoRuta.Mobile.Api.Identidad;
 using NexoRuta.Mobile.Application;
 using NexoRuta.Mobile.Core.Jornadas;
 using NexoRuta.Mobile.Storage;
+using NexoRuta.Mobile.Application.Notificaciones;
 namespace NexoRuta.Mobile;
 
 // Reanuda también cierres pendientes, que ya no tienen el servicio GPS activo.
@@ -25,15 +26,25 @@ public sealed class SincronizacionConectividad(ClienteSesionMovil cliente, Sincr
         using var limite = new CancellationTokenSource(TimeSpan.FromSeconds(45));
         try
         {
-            cuenta = await cliente.LeerCuentaGuardadaAsync(limite.Token);
-            if (cuenta is null) return;
-            await sincronizador.SincronizarPendientesAsync(cuenta, limite.Token);
-            await avisos.RegistrarRecepcionesAsync(cuenta, limite.Token);
-            foreach (var jornada in await datos.LeerJornadasAsync(cuenta, limite.Token, soloAbiertas: true))
-                await avisos.ActualizarRutaAsync(cuenta, jornada.RutaId, limite.Token);
-            await notificaciones.ActualizarRegistroAsync(limite.Token);
+            await TrabajoConRegistroPushIndependiente.EjecutarAsync(
+                async () =>
+                {
+                    cuenta = await cliente.LeerCuentaGuardadaAsync(limite.Token);
+                    if (cuenta is null) return;
+                    await sincronizador.SincronizarPendientesAsync(cuenta, limite.Token);
+                    await avisos.RegistrarRecepcionesAsync(cuenta, limite.Token);
+                    foreach (var jornada in await datos.LeerJornadasAsync(cuenta, limite.Token, soloAbiertas: true))
+                        await avisos.ActualizarRutaAsync(cuenta, jornada.RutaId, limite.Token);
+                },
+                async () =>
+                {
+                    if (cuenta is null) return;
+                    // El registro push tiene su propio plazo y se intenta aunque falle el
+                    // trabajo anterior o expire su límite de 45 segundos.
+                    using var limitePush = new CancellationTokenSource(TimeSpan.FromSeconds(12));
+                    await notificaciones.ActualizarRegistroAsync(limitePush.Token);
+                });
         }
-        catch (Exception) { /* El siguiente disparador reintenta desde el último ACK durable. */ }
         finally
         {
             Volatile.Write(ref enCurso, 0);

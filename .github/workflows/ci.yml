@@ -44,6 +44,8 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Validate GitHub workflows
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 .github/workflows/*.yml
+      - name: Test Firebase Android configuration validation
+        run: python3 -m unittest discover -s tools/tests -p 'test_*.py' -v
 
   pruebas:
     needs: source_policy

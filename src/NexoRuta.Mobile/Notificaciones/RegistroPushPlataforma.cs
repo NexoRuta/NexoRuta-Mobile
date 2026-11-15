@@ -7,6 +7,8 @@ using Firebase.Installations;
 using UIKit;
 using UserNotifications;
 #endif
+using NexoRuta.Mobile.Application.Notificaciones;
+
 namespace NexoRuta.Mobile.Notificaciones;
 
 public sealed class RegistroPushPlataforma : IRegistroPush

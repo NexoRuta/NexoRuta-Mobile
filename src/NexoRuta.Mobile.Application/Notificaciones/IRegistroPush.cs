@@ -1,4 +1,4 @@
-namespace NexoRuta.Mobile.Notificaciones;
+namespace NexoRuta.Mobile.Application.Notificaciones;
 
 public interface IRegistroPush
 {

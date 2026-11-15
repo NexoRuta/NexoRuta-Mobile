@@ -1,53 +1,31 @@
-using NexoRuta.Mobile.Api.Identidad;
+using Microsoft.Extensions.Logging;
 using NexoRuta.Mobile.Application;
+using NexoRuta.Mobile.Application.Notificaciones;
+
 namespace NexoRuta.Mobile.Notificaciones;
 
-public sealed class ControlNotificaciones(IRegistroPush registro, ServicioAvisosReparto? avisos = null, ClienteSesionMovil? cliente = null)
+public sealed class ControlNotificaciones(
+    ServicioRegistroPush registroPush,
+    ServicioAvisosReparto? avisos = null,
+    ILogger<ControlNotificaciones>? logger = null)
 {
-    internal const string ClaveFid = "nexoruta.push.fid.v1";
-    public bool PuedeActivar => registro.MotivoNoDisponible is null;
-    public string Estado { get; private set; } = registro.MotivoNoDisponible ?? "Activá los avisos para recibir cambios urgentes de tu ruta.";
-    public async Task ActivarAsync()
+    public event Action? EstadoCambiado
     {
-        if (cliente is null) { Estado = "Primero debe configurarse el servicio de NexoRuta."; return; }
-        if (registro.MotivoNoDisponible is { } motivo) { Estado = motivo; return; }
-        if (!await registro.SolicitarPermisoAsync())
-        {
-            Estado = "Las notificaciones están desactivadas. Podés consultar las novedades en Avisos.";
-            await ActualizarRegistroAsync(); return;
-        }
-        await registro.RegistrarAsync();
-#if ANDROID
-        await ActualizarRegistroAsync();
-#endif
-        Estado = await SecureStorage.Default.GetAsync(ClaveFid) is null
-            ? "Activando las notificaciones…"
-            : "Notificaciones activadas.";
+        add => registroPush.EstadoCambiado += value;
+        remove => registroPush.EstadoCambiado -= value;
     }
-    public async Task RegistroRecibidoAsync(string fid)
-    {
-        if (fid.Length is < 20 or > 128 || fid.Any(c => !char.IsAsciiLetterOrDigit(c) && c is not ('-' or '_'))) return;
-        await SecureStorage.Default.SetAsync(ClaveFid, fid);
-        await ActualizarRegistroAsync();
-    }
-    public async Task ActualizarRegistroAsync(CancellationToken ct = default)
-    {
-        if (avisos is null || cliente is null || registro.MotivoNoDisponible is not null) return;
-        var cuenta = await cliente.LeerCuentaGuardadaAsync(ct);
-        var fid = await SecureStorage.Default.GetAsync(ClaveFid);
-        if (cuenta is null || fid is null) return;
-        await avisos.RegistrarInstalacionAsync(cuenta,
-#if ANDROID
-            "Android",
-#else
-            "iOS",
-#endif
-            fid, await registro.PermitidoAsync(), ct);
-    }
-    public void SalidaIncompleta() => Estado = "Si la salida no se completó, los avisos se reactivan al recuperar conexión o volver a ingresar.";
+
+    public bool PuedeActivar => registroPush.PuedeActivar;
+    public string Estado => registroPush.Estado;
+
+    public Task ActivarAsync() => registroPush.ActivarAsync();
+    public Task RegistroRecibidoAsync(string fid) => registroPush.RegistroRecibidoAsync(fid);
+    public Task<bool> ActualizarRegistroAsync(CancellationToken ct = default) => registroPush.ActualizarRegistroAsync(ct);
+    public void SalidaIncompleta() => registroPush.SalidaIncompleta();
+
     public void SesionCerrada()
     {
-        Estado = "Activá los avisos para recibir cambios urgentes de tu ruta.";
+        registroPush.SesionCerrada();
 #if ANDROID
         var manager = (global::Android.App.NotificationManager?)global::Android.App.Application.Context.GetSystemService(global::Android.Content.Context.NotificationService);
         manager?.CancelAll();
@@ -55,10 +33,16 @@ public sealed class ControlNotificaciones(IRegistroPush registro, ServicioAvisos
         global::UserNotifications.UNUserNotificationCenter.Current.RemoveAllDeliveredNotifications();
 #endif
     }
+
     public async Task<bool> RecibirAsync(IReadOnlyDictionary<string, string> datos, bool abierto)
     {
         if (avisos is null) return false;
         try { return await avisos.GuardarReferenciaAsync(datos, abierto); }
-        catch { Estado = "Hay una novedad en tu recorrido. Revisá tus avisos."; return false; }
+        catch (Exception ex)
+        {
+            logger?.LogWarning("No se pudo guardar una referencia de aviso push. ErrorType: {ErrorType}", ex.GetType().Name);
+            registroPush.AvisoPendiente();
+            return false;
+        }
     }
 }
