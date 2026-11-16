@@ -1,10 +1,10 @@
 # Preparación del mapa de la jornada
 
-Estado al 20/10/2026: preparación durable y adaptador Android implementados; falta token Mapbox propio para comprobar descarga, renderizado y reapertura real en modo avión. El usuario confirmó que todavía no lo tiene. No se acredita la aceptación completa de T02.g/T10.
+La preparación durable y el adaptador Android están implementados. La evidencia del 20/10/2026 no acredita descarga, renderizado ni reapertura en modo avión con un mapa real. La aceptación de T02.g/T10 requiere un APK con token público Mapbox configurado y una prueba nativa.
 
 ## Comportamiento
 
-La hoja muestra el estado del mapa y permite abrir «Preparar mapa de la zona» antes de salir. La confirmación de carga/salida exige que el mapa de esa hoja esté preparado. Sin proveedor configurado, las direcciones siguen disponibles, se informa la dependencia y se mantiene bloqueada esa confirmación; no hay una omisión silenciosa del requisito.
+En la hoja, **Recorrido → Ver mapa** abre el mapa de las paradas activas con coordenadas. La descarga de una zona es opcional y no bloquea la confirmación de carga o salida. Sin descargarla, el mapa online requiere conexión; sin proveedor configurado, las direcciones siguen disponibles y la app informa la falta de configuración.
 
 La preparación comprende estilo, fuentes/sprites y teselas de la zona de las paradas, con zoom 6–14. La vista muestra el destino con un marcador y no incorpora indicaciones de giro. La huella de cobertura depende del proveedor, estilo, límites y zoom; cambios de orden o estado de los envíos no invalidan la descarga. Una zona o estilo diferente exige preparar el mapa nuevamente.
 

@@ -8,7 +8,7 @@ Cada parada contiene `reglas`: identificador y número de publicación, requisit
 
 El selector muestra la descripción del motivo y envía su código. El servidor cuenta los intentos aplicados de ese envío entre jornadas y compara las fechas registradas por el dispositivo. Un intervalo o máximo incumplido conserva el registro como conflicto, sin inventar una visita. Si la versión exige iniciar devolución al agotar intentos, cambia el estado y suspende la parada; el bulto continúa bajo custodia del repartidor hasta rendición y recepción física.
 
-La evidencia completa se valida automáticamente con los requisitos capturados. Se mantiene la entrega física con prueba pendiente hasta el cierre de jornada y la conciliación ya acordada para cancelaciones/reasignaciones concurrentes. Despacho no aprueba ni rechaza la entrega.
+La evidencia completa se valida automáticamente con los requisitos capturados. Cada bulto entregado con prueba pendiente tiene su propio plazo de validación: completar la evidencia de uno no valida los demás. El Worker procesa los vencimientos por bulto y recalcula el estado del envío; una prueba tardía no reabre un resultado vencido. El cierre de jornada no sustituye esa validación. Se conserva la conciliación acordada para cancelaciones o reasignaciones concurrentes; despacho no aprueba ni rechaza la entrega.
 
 La configuración de reparto conserva únicamente zona horaria, máximo de paradas, foto del intento fallido y tratamiento de diferencias de carga. Los requisitos de entrega, motivos y límites de intentos se editan en la pantalla central de reglas operativas.
 

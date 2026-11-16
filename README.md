@@ -4,7 +4,9 @@ Aplicación del repartidor en .NET MAUI 10. Incluye ingreso central, desbloqueo 
 
 El [plan de implementación](docs/plan-implementacion.md) conserva las decisiones de producto y el avance por tareas. La [arquitectura](docs/arquitectura-mobile.md) explica las capas y los límites de confianza. La [ejecución y evidencia](docs/ejecucion-completa.md) distingue lo implementado, lo probado y lo pendiente.
 
-## Estado al 21/10/2026
+## Estado de la app
+
+Los ensayos fechados describen el entorno y la versión que se probaron. Para la preentrega, consultar los [guiones de aceptación nativa](docs/aceptacion-android/README.md).
 
 Backend implementa perfiles, reglas versionadas, rutas, custodia física y sincronización. Backoffice incluye planificación, despacho, recepción y reasignación. La reasignación conserva al custodio actual y encola un aviso dirigido a él; el nuevo despacho exige recepción física en depósito.
 
@@ -12,9 +14,9 @@ El cliente Android registra FID y permisos, recibe avisos genéricos y consulta 
 
 **Entorno local HTTPS/API/Worker/RabbitMQ/Mailpit en ejecución, con base aislada.** Se comprobaron ingreso y descarga en el S21, registro FID, reasignación con el proceso de la app cerrado, envío FCM real y notificación publicada en Android. El usuario completó el desbloqueo local; recepción, apertura y confirmación quedaron persistidas por separado. [Evidencia y límites](docs/validacion-local-s21.md).
 
-La [preparación del mapa offline](docs/mapa-offline.md) conserva el estado por cuenta/hoja, comprueba estilo y teselas y protege la descarga anterior ante fallos. La confirmación de salida exige mapa preparado. Sin token, se informa la dependencia; la recepción/descarga real y el puente offline iOS siguen pendientes.
+La [preparación del mapa offline](docs/mapa-offline.md) conserva el estado por cuenta/hoja, comprueba estilo y teselas y protege la descarga anterior ante fallos. La descarga es opcional para confirmar la salida. El mapa online requiere conexión y un token configurado; la aceptación de la descarga y reapertura sin red en Android y el puente offline iOS siguen pendientes.
 
-La geocodificación usa Geoapify Free detrás de interfaz; Comercio elige y confirma/corrige el destino. Falta clave propia de Geoapify y token público Mapbox para validar proveedores reales y mapa offline. El circuito de correo/cancelación se probó localmente en Mailpit, sin SMTP externo. Cierre de jornada con faltantes registra incidencias inmutables y conserva custodia hasta recepción física en depósito. El cliente iOS ya implementa registro FID y recepción/apertura push; falta compilarlo y aceptarlo con Firebase/APNs y recursos Apple.
+El Backend usa Mapbox temporal para buscar destinos de envíos; Comercio elige y confirma o corrige el punto. Geoapify se usa para las propuestas de base operativa. La [guía local](tools/local/README.md#dependencias-externas) distingue los proveedores del Backend de la configuración del mapa móvil. El circuito de correo/cancelación se probó localmente en Mailpit, sin SMTP externo. Cierre de jornada con faltantes registra incidencias inmutables y conserva custodia hasta recepción física en depósito. El cliente iOS ya implementa registro FID y recepción/apertura push; falta compilarlo y aceptarlo con Firebase/APNs y recursos Apple.
 
 La [integración parcial de CU-04](docs/reglas-envio.md) fija las reglas al crear cada envío y las descarga por parada; se verificó ingreso, descarga y detalle en una variante separada del S21. Quedan aceptación operativa móvil completa, mapa offline y firma/infraestructura de distribución. No confundir el ensayo FCM con un despliegue de producción ni con la aceptación integral del plan.
 
@@ -82,6 +84,12 @@ El puerto de conexión está en la pantalla principal de depuración inalámbric
 Las versiones de desarrollo para Android ARM64 se publican como [pre-releases descargables](https://github.com/NexoRuta/NexoRuta-Mobile/releases) al integrar cambios de la app en `main`. Cada release incluye el APK y su checksum SHA-256. Usa una clave de desarrollo dedicada y estable para poder actualizar entre estas versiones; no es la clave de distribución. La build queda configurada para conectar al origen HTTPS público de la API GCP indicado por la variable de Actions `NEXORUTA_GCP_API_ORIGIN` del repositorio Mobile.
 
 El backend demo puede estar apagado hasta que se inicie desde los controles de VM. La publicación incluye Firebase para Android y Mapbox desde sus configuraciones protegidas de GitHub Actions. No es una build de producción; al cambiar más adelante a la clave de distribución habrá que instalar esa versión como una app nueva.
+
+Para instalar, compará el SHA-256 con el publicado, elegí el dispositivo con `adb devices -l` y ejecutá `adb -s SERIAL install -r "RUTA_AL_APK"`. La firma debe coincidir con la instalación existente. Si Android rechaza la actualización, conservá la app y sus datos hasta conseguir el APK firmado correctamente.
+
+El origen de la API **se fija al compilar**; no se cambia desde la app. El APK de la pre-release apunta a la demo GCP. Para una API local necesitás el APK compilado para Docker, su CA pública y `adb reverse`. Seguí la [guía de Android](tools/local/README.md#instalar-y-verificar-en-android) para elegir el APK y comprobar primero `/ready` y después el ingreso y la descarga de una hoja ficticia desde el dispositivo.
+
+Para la preentrega: [entrega parcial y retiro](docs/cambios-31-41.md) · [sincronización y resolución de conflictos](docs/adr/conflictos-offline.md) · [push y reasignación](docs/push-reasignacion.md) · [aceptación Android y registro de evidencia](docs/aceptacion-android/README.md).
 
 ## Compilar y comprobar
 
