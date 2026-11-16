@@ -95,12 +95,37 @@ La URL efectiva de este target es `https://localhost:5843/`. Verificar la firma 
 
 Si quedan pendientes, volver a usar Actualizar: se conservan los mismos IDs, sobres durables y orden causal. No borrar la cola, adelantar el cierre ni generar otro. El límite existente de cien operaciones por lote se mantiene; las posiciones históricas se envían antes del cierre que las sigue. Un cierre confirmado no sustituye la recepción física ni la liberación manual de disponibilidad en Backoffice.
 
-## Android por Wi-Fi
+## Instalar y verificar en Android
+
+1. **Elegí el APK según la API que vas a probar.** La URL está incorporada al compilar; no hay selector en la app.
+
+   | API | APK | Conexión desde Android |
+   | --- | --- | --- |
+   | Demo GCP | [Pre-release de desarrollo ARM64](https://github.com/NexoRuta/NexoRuta-Mobile/releases), o APK compatible compilado con `NexoRutaBackendTarget=GcpDemo` y `NexoRutaGcpApiOrigin` del entorno. | HTTPS público. Sin CA local ni `adb reverse`. Si cambió el origen desde la compilación, usá una build con el origen actual. |
+   | Docker local | APK compilado con `NexoRutaBackendTarget=Docker` y `NexoRutaAndroidDevelopmentCa` apuntando a la CA pública del gateway. Ver [compilación por Wi-Fi](#compilar-para-android-por-wi-fi). | `https://localhost:5843/` mediante `adb -s SERIAL reverse tcp:5843 tcp:5843`. Para un emulador Windows que reutiliza la API habitual, usá el [helper de reconexión](#emulador-windows-con-la-api-habitual). |
+
+2. **Comprobá e instalá.** Calculá el SHA-256 con `Get-FileHash -Algorithm SHA256 "RUTA_AL_APK"` en PowerShell o `sha256sum RUTA_AL_APK` en Linux. Comparalo con el de la publicación o registralo si es una build propia. Usá un APK de la ABI del dispositivo y con la firma de la instalación existente. Luego:
+
+   ```text
+   adb devices -l
+   adb -s SERIAL shell getprop ro.product.cpu.abilist
+   adb -s SERIAL install -r "RUTA_AL_APK"
+   ```
+
+   Abrí **NexoRuta Repartidor** (`uy.nexoruta.repartidor`). Si falla por firma, conseguí el APK compatible; no borres la instalación ni el almacenamiento para forzar una actualización.
+
+3. **Separá disponibilidad de autenticación.** Desde la computadora, pedí `GET /ready` al origen público con HTTPS válido o, para Docker, ejecutá `curl --cacert .local/mobile/tls/ca.crt https://localhost:5843/ready` desde la raíz combinada. En Windows usá `curl.exe` si `curl` es un alias. Esperá HTTP 200. Esto confirma el servidor desde la computadora, pero no la ruta desde Android. En el dispositivo, iniciá sesión con la cuenta ficticia del entorno correcto y descargá una hoja de prueba asignada; comprobá el identificador esperado. Para el emulador Debug con CA local, `-ProbeApp` permite además probar el HTTPS desde la propia app antes de iniciar sesión.
+
+Si `/ready` funciona en la computadora pero falla el ingreso en Android, revisá el origen incorporado, el túnel `adb reverse` si es local, la CA de la build y las credenciales/permisos del entorno. Si el ingreso funciona y no aparece la hoja, verificá su despacho y asignación. No desactives la validación TLS.
+
+Seguí los [guiones de aceptación nativa](../../docs/aceptacion-android/README.md) para registrar el APK, el dispositivo y el resultado. Referencias: [parcial y retiro](../../docs/cambios-31-41.md) · [sincronización offline](../../docs/adr/conflictos-offline.md) · [push](../../docs/push-reasignacion.md).
+
+## Compilar para Android por Wi-Fi
 
 Con el entorno Android cargado y el S21 ya autorizado en `adb devices`:
 
 ```bash
-adb reverse tcp:5843 tcp:5843
+adb -s SERIAL reverse tcp:5843 tcp:5843
 export NEXORUTA_FIREBASE_ANDROID_PROJECT_ID=proyecto-firebase-del-backend
 python3 mobile/tools/validar-firebase-android.py --config "$PWD/mobile/google-services.json" --project-id "$NEXORUTA_FIREBASE_ANDROID_PROJECT_ID"
 R8_JAR="$(python3 mobile/tools/preparar-r8.py)"
@@ -135,8 +160,9 @@ ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=http://127.0.0.1:5853 Api__Ba
 
 ## Dependencias externas
 
-- Geoapify: cuenta Free y clave backend en `GEOAPIFY_API_KEY` de `local.env`. Sin clave, la búsqueda informa 503 y deja confirmar el punto manualmente. La clave no se envía al navegador ni al APK.
-- Mapbox: token público `pk.` de su proyecto. Configurar `Mapbox__PublicAccessToken` en Commerce/Backoffice y `NexoRutaMapboxPublicToken` al compilar MAUI. No usar tokens privados `sk.` ni credenciales ajenas de ejemplos públicos.
+- **Búsqueda de destinos de envíos:** el Backend usa Mapbox temporal. La API requiere `Geocoding__MapboxTemporal__Habilitado=true` y `Mapbox__PublicAccessToken` con un token público `pk.`. El Compose de esta guía no pasa esas opciones a la API por defecto. Sin geocodificador disponible, la búsqueda devuelve 503; el contrato permite la confirmación manual.
+- **Propuestas de base operativa:** el Backend usa Geoapify. El Compose pasa `GEOAPIFY_API_KEY` de `local.env` a `Geocoding__Geoapify__ApiKey`; las llamadas reales requieren además `Geocoding__Geoapify__PermitirLlamadasReales=true` en la API. Esa clave no se distribuye en el APK.
+- **Mapa visible en Android:** pasar el token público Mapbox como `NexoRutaMapboxPublicToken` al compilar MAUI. Esto habilita el proveedor en el APK; no habilita las búsquedas en la API. La descarga offline es opcional para salir. No usar tokens privados `sk.` ni credenciales ajenas.
 - Firebase Android: JSON del proyecto correcto y ADC en la ruta de `NEXORUTA_GOOGLE_ADC_FILE`. Activar el perfil push solo al probar destinatarios reales autorizados; aceptación FCM no demuestra visualización del aviso.
 - Producción: dominio/HTTPS, SMTP real, despliegue e IaC propios. Este entorno no aprovisiona recursos facturables ni abre puertos hacia la LAN/Internet.
 - iOS: Mac/Xcode, cuenta/equipo Apple, configuración Firebase iOS y APNs. No se afirma compilación ni recepción iOS desde Ubuntu.

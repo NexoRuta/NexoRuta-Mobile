@@ -1,18 +1,18 @@
 # Sesión móvil, reingreso y salida protegida
 
-Actualizado el 19/10/2026 sobre el [contrato central](contratos/identidad.md). Ingreso, desbloqueo, recuperación y cierre están conectados a MAUI. Las pruebas de sesión usan HTTP controlado y SQLite real cifrado; falta validar el recorrido contra API HTTPS desde el S21.
+Ingreso, desbloqueo, recuperación y salida están conectados a MAUI sobre el [contrato central](contratos/identidad.md). La batería controlada usa HTTP simulado y SQLite cifrado real. Un [ensayo posterior en el S21](validacion-local-s21.md) verificó ingreso, descarga por HTTPS y salida sin pendientes; sus resultados no cubren todos los fallos de sesión o de red.
 
 ## Componentes
 
-- `NexoRuta.Mobile.Api`: biblioteca .NET 10, dependiente solo de `Mobile.Core` para `CuentaMovil`. No referencia MAUI, proyectos backend, frontend ni paquetes adicionales.
-- `ClienteSesionMovil`: ingreso, consulta de identidad, consulta de permisos y renovación. Usar **una instancia por proceso**, compuesta por DI al integrar la pantalla. Serializa estas operaciones con un único semáforo.
+- `NexoRuta.Mobile.Api`: biblioteca .NET 10. Referencia `Mobile.Core` y el paquete `Microsoft.Extensions.Logging.Abstractions`; no referencia MAUI, Backend ni Frontend.
+- `ClienteSesionMovil`: ingreso, consulta de identidad, consulta de permisos y renovación. La app lo registra como **una instancia por proceso** mediante DI. Serializa estas operaciones con un semáforo.
 - `IAlmacenSesionMovil` y `AlmacenSesionProtegida`: estado completo en un único valor de `SecureStorage`, con JSON generado sin reflexión. El cliente se crea por DI cuando existe un origen HTTPS configurado. `EliminarAsync` retira solo la sesión protegida; no borra cuentas, claves ni evidencias.
 
 La UI nunca recibe la contraseña desde el almacén: no se persiste. Las clases con tokens no generan un `ToString` que incluya sus propiedades. No se registran cuerpos ni respuestas de autenticación.
 
 El cliente exige el origen HTTPS de la API, sin usuario/contraseña, ruta, query ni fragmento. El transporte predeterminado mantiene la validación normal de certificados, desactiva cookies y redirecciones automáticas, limita respuestas a 4 MiB y tiene timeout de 30 segundos. No se implementaron certificados permisivos, HTTP de desarrollo ni compatibilidades con contratos antiguos. El `HttpMessageHandler` inyectable permite las pruebas sin red.
 
-La API local actual usa HTTP en el puerto 5041; **no se la convierte en un destino válido para enviar credenciales desde mobile**. Antes del corte de UI/integración real hay que configurar un origen HTTPS accesible y confiable para el S21.
+El perfil HTTP del Backend puede usarse detrás del gateway HTTPS; Mobile envía credenciales al origen HTTPS incorporado al compilar. Para Docker local el origen es `https://localhost:5843/` con la CA pública de desarrollo y `adb reverse`. Para la demo GCP se usa el origen HTTPS público. Ver la [guía de Android](../tools/local/README.md#instalar-y-verificar-en-android).
 
 ## Identidad y aislamiento
 
@@ -68,8 +68,8 @@ dotnet build src/NexoRuta.Mobile/NexoRuta.Mobile.csproj \
 
 **52 pruebas correctas** con transporte controlado y almacén simulado. Cubren identidad obtenida del servidor, misma/otra cuenta, aislamiento por origen, errores HTTP, 12 consultas concurrentes con una sola renovación, respuesta perdida y reapertura, cancelación, fallos antes/después de consumir refresh, plazo absoluto, rotación inválida, serialización y estado corrupto. La capa Application pasó 26 pruebas con SQLite cifrado y archivos reales, incluidas siete de salida: operaciones y borradores pendientes, suspensión concurrente, pérdida de respuesta, cancelación y clave perdida. Storage conserva sus 35 pruebas correctas. Android ARM64 Release compila sin errores y con las tres advertencias Mapbox conocidas sobre páginas de 16 KB.
 
-No se probó este cliente contra una API HTTPS real, ni su almacenamiento de sesión en el S21. La prueba nativa anterior de archivos/claves sigue siendo evidencia de T02.c, no de este flujo. iOS tiene el adaptador compartido preparado, sin compilación ni pruebas Apple.
+Los resultados anteriores corresponden al corte de pruebas controladas. La [verificación posterior en el S21](validacion-local-s21.md) da evidencia separada de ingreso por HTTPS, descarga, reapertura con verificación local y salida sin pendientes.
 
 ## Validación pendiente
 
-Preparar un origen HTTPS confiable y API/Worker conectados a su base antes de probar credenciales, salida y baja de notificaciones en el S21. La compilación del adaptador y las pruebas HTTP controladas no acreditan ese recorrido nativo. iOS tiene ahora el binding FID y el flujo push implementados en código, pero sigue sin compilación ni pruebas Apple.
+Queda por acreditar en el dispositivo el bloqueo de salida con operaciones o capturas pendientes y la recuperación ante una baja de push incompleta seguida de reingreso. Las pruebas controladas cubren esos escenarios sin sustituir la comprobación nativa. iOS tiene el binding FID y el flujo push implementados en código, pero sigue sin compilación ni pruebas Apple.
